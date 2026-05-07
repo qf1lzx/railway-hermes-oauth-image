@@ -1,7 +1,5 @@
 # Hermes Agent for Railway — Codex + Nous subscriptions
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/qf1lzx/railway-hermes-oauth-image)
-
 A Railway-ready, gateway-only Hermes Agent container for using:
 
 - **OpenAI Codex subscription** as the main model provider
@@ -11,51 +9,92 @@ A Railway-ready, gateway-only Hermes Agent container for using:
 
 No admin dashboard is included. Railway only exposes a tiny `/health` endpoint; you talk to Hermes through the messaging gateway.
 
-## The simple deploy path
+## Important: this is a GitHub repo, not a published Railway Marketplace template
 
-### 1. Click deploy
-
-Use the button above, or this URL:
+Railway's old generic URL form:
 
 ```txt
-https://railway.app/new/template?template=https://github.com/qf1lzx/railway-hermes-oauth-image
+https://railway.app/new/template?template=https://github.com/OWNER/REPO
 ```
 
-Railway will build the Dockerfile directly. `railway.toml` already sets the builder, health check, and restart policy.
+is **not** enough for Railway to recognize a repo as a real template anymore. Real templates need a Railway-generated template code like:
 
-### 2. Add a Railway volume
+```txt
+https://railway.com/new/template/ZweBXA
+```
 
-Mount a persistent volume at:
+So until this is published from the Railway Templates UI, use one of the two setup paths below.
+
+## Fastest setup: one local script
+
+This creates/uses a Railway project, adds the GitHub-backed service, attaches the `/data` volume, uploads your local OAuth files as Railway variables, and triggers a deployment.
+
+```bash
+cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
+./scripts/create-railway-project.sh
+```
+
+It will ask for:
+
+```txt
+Telegram bot token from @BotFather
+Your numeric Telegram user ID from @userinfobot
+```
+
+You can also run it non-interactively:
+
+```bash
+cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
+
+export PROJECT_NAME='hermes-agent'
+export SERVICE_NAME='hermes'
+export TELEGRAM_BOT_TOKEN='...'
+export TELEGRAM_ALLOWED_USERS='123456789'
+
+./scripts/create-railway-project.sh
+```
+
+The script uploads these without printing secret values:
+
+- `~/.hermes/auth.json` → `HERMES_AUTH_JSON`
+- `~/.codex/auth.json` → `CODEX_AUTH_JSON`, if present
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_ALLOWED_USERS`
+- `GATEWAY_ALLOW_ALL_USERS=false`
+
+## Manual Railway UI setup
+
+If you prefer the Railway web UI:
+
+1. Railway → **New Project** → **Deploy from GitHub repo**
+2. Select:
+
+```txt
+qf1lzx/railway-hermes-oauth-image
+```
+
+3. Add a volume mounted at:
 
 ```txt
 /data
 ```
 
-This stores Hermes config, auth, sessions, pairing approvals, logs, skills, generated files, and cron state.
-
-### 3. Set only the variables you actually need
-
-For Telegram, the minimum is:
+4. Add variables:
 
 ```env
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_USERS=123456789
 GATEWAY_ALLOW_ALL_USERS=false
-```
-
-For Codex/Nous subscription OAuth, set one of these once:
-
-```env
 HERMES_AUTH_JSON={...contents of ~/.hermes/auth.json...}
 ```
 
-Optional Codex CLI credential import:
+To copy the local auth file:
 
-```env
-CODEX_AUTH_JSON={...contents of ~/.codex/auth.json...}
+```bash
+pbcopy < ~/.hermes/auth.json
 ```
 
-That is it. You do **not** need to base64 encode config/env files anymore.
+That is it. You do **not** need to base64 encode config/env files.
 
 ## Why any auth JSON is still needed
 
@@ -69,17 +108,15 @@ hermes auth add nous --type oauth
 hermes auth list
 ```
 
-Then copy the raw file contents into the Railway variable `HERMES_AUTH_JSON`:
+Then use either the setup script or paste the raw file contents into Railway as `HERMES_AUTH_JSON`:
 
 ```bash
 pbcopy < ~/.hermes/auth.json
 ```
 
-No base64. No config YAML. No `.env` file assembly.
-
 ## Optional: push local secrets to an already-linked Railway service
 
-If you use the Railway CLI and this repo is linked to a Railway service:
+If you already have a Railway service linked to this directory:
 
 ```bash
 cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
@@ -88,12 +125,6 @@ export TELEGRAM_ALLOWED_USERS='123456789'
 export GATEWAY_ALLOW_ALL_USERS=false
 ./scripts/push-railway-vars.sh
 ```
-
-The script uploads:
-
-- `~/.hermes/auth.json` as `HERMES_AUTH_JSON`
-- `~/.codex/auth.json` as `CODEX_AUTH_JSON`, if present
-- common gateway variables from your shell environment
 
 ## Runtime defaults
 
@@ -151,4 +182,4 @@ hermes gateway container ok
 
 - Treat `HERMES_AUTH_JSON` like a password. It contains refresh tokens.
 - Railway is Linux; Mac-only local integrations like Cua Driver, BlueBubbles/iMessage, and Spotify AppleScript will not work inside this container.
-- If the GitHub repo is private, the generic Deploy button may require GitHub/Railway access. Making the repo public gives the cleanest one-click template flow.
+- A real one-click Railway template link requires creating/publishing a template from Railway's Templates UI. This repo is ready for that, but the generic GitHub URL is not a marketplace template code.
