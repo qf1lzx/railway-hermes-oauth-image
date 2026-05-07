@@ -56,7 +56,20 @@ fi
 
 echo "Adding GitHub-backed service: $SERVICE_NAME from $REPO"
 if ! railway service list --json 2>/dev/null | grep -q '"name":"'"$SERVICE_NAME"'"'; then
-  railway add --repo "$REPO" --service "$SERVICE_NAME"
+  if ! railway add --repo "$REPO" --service "$SERVICE_NAME"; then
+    cat >&2 <<'EOF'
+
+Railway failed while adding the GitHub-backed service.
+Most common cause: the Railway CLI token is stale even if `railway whoami` still prints a user.
+
+Fix locally, then rerun this script:
+  railway login --browserless
+
+If Railway asks for GitHub access, approve access to this repo:
+  qf1lzx/railway-hermes-oauth-image
+EOF
+    exit 1
+  fi
 else
   echo "Service $SERVICE_NAME already exists; skipping add."
 fi
