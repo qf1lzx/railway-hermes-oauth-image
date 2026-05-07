@@ -9,9 +9,10 @@ mkdir -p "$HERMES_HOME" \
   "$HERMES_HOME/cron" "$HERMES_HOME/sessions" "$HERMES_HOME/logs" \
   "$HERMES_HOME/memories" "$HERMES_HOME/skills" "$HERMES_HOME/pairing" \
   "$HERMES_HOME/hooks" "$HERMES_HOME/image_cache" "$HERMES_HOME/audio_cache" \
-  "$HERMES_HOME/workspace"
+  "$HERMES_HOME/workspace" \
+  "$HOME/.codex"
 
-chmod 700 "$HERMES_HOME" || true
+chmod 700 "$HERMES_HOME" "$HOME/.codex" || true
 rm -f "$HERMES_HOME/gateway.pid"
 
 write_b64_file() {
@@ -26,9 +27,40 @@ write_b64_file() {
   fi
 }
 
+write_raw_file() {
+  local var_name="$1"
+  local target="$2"
+  local value="${!var_name:-}"
+
+  if [ -n "$value" ]; then
+    printf '%s' "$value" > "$target"
+    chmod 600 "$target"
+    echo "[boot] wrote $target from $var_name"
+  fi
+}
+
+append_env_if_set() {
+  local key="$1"
+  local value="${!key:-}"
+  if [ -n "$value" ] && ! grep -q "^${key}=" "$HERMES_HOME/.env" 2>/dev/null; then
+    printf '%s=%s\n' "$key" "$value" >> "$HERMES_HOME/.env"
+  fi
+}
+
+# Preferred: simple raw Railway variables. B64 variants remain supported for
+# large/multiline secrets and backwards compatibility.
 write_b64_file HERMES_AUTH_JSON_B64 "$HERMES_HOME/auth.json"
+write_raw_file HERMES_AUTH_JSON "$HERMES_HOME/auth.json"
 write_b64_file HERMES_CONFIG_YAML_B64 "$HERMES_HOME/config.yaml"
+write_raw_file HERMES_CONFIG_YAML "$HERMES_HOME/config.yaml"
 write_b64_file HERMES_ENV_B64 "$HERMES_HOME/.env"
+write_raw_file HERMES_ENV "$HERMES_HOME/.env"
+
+# Some Codex setups can reuse the Codex CLI credential file. If the user has it,
+# let Railway hydrate it directly too. Hermes still prefers its own auth store
+# when HERMES_AUTH_JSON is present.
+write_b64_file CODEX_AUTH_JSON_B64 "$HOME/.codex/auth.json"
+write_raw_file CODEX_AUTH_JSON "$HOME/.codex/auth.json"
 
 if [ ! -f "$HERMES_HOME/.env" ]; then
   touch "$HERMES_HOME/.env"
@@ -38,8 +70,46 @@ fi
 if [ ! -f "$HERMES_HOME/config.yaml" ]; then
   cat > "$HERMES_HOME/config.yaml" <<EOF
 model:
-  provider: "${HERMES_MODEL_PROVIDER:-openai-codex}"
-  default: "${LLM_MODEL:-openai/gpt-5.4}"
+  provider: "${HERMES_MAIN_PROVIDER:-${HERMES_MODEL_PROVIDER:-openai-codex}}"
+  default: "${HERMES_MAIN_MODEL:-${LLM_MODEL:-openai/gpt-5.4}}"
+
+delegation:
+  provider: "${HERMES_DELEGATION_PROVIDER:-nous}"
+  model: "${HERMES_DELEGATION_MODEL:-moonshotai/kimi-k2.6}"
+  base_url: "${HERMES_DELEGATION_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+
+auxiliary:
+  vision:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
+  web_extract:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
+  compression:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
+  title_generation:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+  approval:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+  skills_hub:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+  mcp:
+    provider: "${HERMES_AUX_PROVIDER:-nous}"
+    model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
+    base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
 
 terminal:
   backend: "local"
@@ -47,32 +117,31 @@ terminal:
   timeout: 180
 
 agent:
-  max_iterations: 90
+  max_iterations: ${HERMES_MAX_ITERATIONS:-90}
 
 data_dir: "$HERMES_HOME"
 EOF
   chmod 600 "$HERMES_HOME/config.yaml"
-  echo "[boot] wrote fallback config.yaml"
+  echo "[boot] wrote generated config.yaml from Railway variables/defaults"
 fi
 
-# Mirror selected Railway env vars into Hermes .env without overwriting an encoded .env.
-# Keep this small and explicit; secrets should usually be provided through HERMES_ENV_B64.
-if [ -z "${HERMES_ENV_B64:-}" ]; then
-  for key in \
-    LLM_MODEL HERMES_MODEL_PROVIDER \
-    TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_USERS \
-    DISCORD_BOT_TOKEN DISCORD_ALLOWED_USERS \
-    SLACK_BOT_TOKEN SLACK_APP_TOKEN \
-    GATEWAY_ALLOW_ALL_USERS; do
-    value="${!key:-}"
-    if [ -n "$value" ] && ! grep -q "^${key}=" "$HERMES_HOME/.env" 2>/dev/null; then
-      printf '%s=%s\n' "$key" "$value" >> "$HERMES_HOME/.env"
-    fi
-  done
-fi
+# Mirror common Railway variables into Hermes .env. This is what makes the image
+# template-like: users can set normal env vars instead of shipping a prepared .env.
+for key in \
+  TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_USERS TELEGRAM_ALLOWED_CHATS \
+  DISCORD_BOT_TOKEN DISCORD_ALLOWED_USERS DISCORD_ALLOWED_CHANNELS \
+  SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_ALLOWED_USERS SLACK_ALLOWED_CHANNELS \
+  MATRIX_HOMESERVER MATRIX_ACCESS_TOKEN MATRIX_ROOM_ID \
+  GATEWAY_ALLOW_ALL_USERS WEBHOOK_SECRET \
+  FIRECRAWL_API_KEY TAVILY_API_KEY EXA_API_KEY FAL_KEY FAL_API_KEY \
+  OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
+  GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY \
+  HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT; do
+  append_env_if_set "$key"
+done
 
-if [ ! -s "$HERMES_HOME/auth.json" ]; then
-  echo "[boot] WARNING: $HERMES_HOME/auth.json missing/empty. OAuth providers like nous/openai-codex will not work until HERMES_AUTH_JSON_B64 is set."
+if [ ! -s "$HERMES_HOME/auth.json" ] && [ ! -s "$HOME/.codex/auth.json" ]; then
+  echo "[boot] WARNING: no OAuth credentials found. For Codex/Nous subscriptions set HERMES_AUTH_JSON or HERMES_AUTH_JSON_B64 once, or CODEX_AUTH_JSON for Codex CLI credentials."
 fi
 
 # Gateway-only runtime. Railway still expects an HTTP listener for health checks,
