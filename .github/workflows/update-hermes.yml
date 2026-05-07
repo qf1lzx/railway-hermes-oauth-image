@@ -1,0 +1,44 @@
+name: Update Hermes Agent
+
+on:
+  schedule:
+    # Check once per day. Railway will redeploy when this workflow pushes a commit.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-hermes-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update Dockerfile to latest Hermes release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_tag="$(
+            curl -fsSL https://api.github.com/repos/NousResearch/hermes-agent/releases/latest \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'
+          )"
+
+          current_tag="$(sed -n 's/^ARG HERMES_REF=//p' Dockerfile | head -1)"
+          echo "Current Hermes ref: ${current_tag}"
+          echo "Latest Hermes ref:  ${latest_tag}"
+
+          if [ "${current_tag}" = "${latest_tag}" ]; then
+            echo "Already up to date."
+            exit 0
+          fi
+
+          python3 -c "from pathlib import Path; p=Path('Dockerfile'); s=p.read_text(); s=s.replace('ARG HERMES_REF=${current_tag}', 'ARG HERMES_REF=${latest_tag}'); p.write_text(s)"
+
+      - name: Commit and push update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update Hermes Agent to latest release"
+          file_pattern: Dockerfile

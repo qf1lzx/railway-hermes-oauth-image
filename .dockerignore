@@ -1,0 +1,6 @@
+.git
+.gitignore
+railway-config.yaml
+railway-hermes.env
+.DS_Store
+README.md
