@@ -54,21 +54,16 @@ else
   echo "Already linked to a Railway project; using current link."
 fi
 
-echo "Adding GitHub-backed service: $SERVICE_NAME from $REPO"
+echo "Ensuring Railway service exists: $SERVICE_NAME"
 if ! railway service list --json 2>/dev/null | grep -q '"name":"'"$SERVICE_NAME"'"'; then
+  echo "Trying GitHub-backed service from $REPO"
   if ! railway add --repo "$REPO" --service "$SERVICE_NAME"; then
     cat >&2 <<'EOF'
 
-Railway failed while adding the GitHub-backed service.
-Most common cause: the Railway CLI token is stale even if `railway whoami` still prints a user.
-
-Fix locally, then rerun this script:
-  railway login --browserless
-
-If Railway asks for GitHub access, approve access to this repo:
-  qf1lzx/railway-hermes-oauth-image
+Railway could not add the GitHub-backed service. Falling back to an empty
+service + `railway up`, which avoids Railway's GitHub integration path.
 EOF
-    exit 1
+    railway add --service "$SERVICE_NAME"
   fi
 else
   echo "Service $SERVICE_NAME already exists; skipping add."
@@ -78,7 +73,9 @@ railway service link "$SERVICE_NAME" >/dev/null 2>&1 || true
 
 echo "Ensuring persistent volume mounted at $VOLUME_MOUNT_PATH"
 if ! railway volume list --json 2>/dev/null | grep -q '"mountPath":"'"$VOLUME_MOUNT_PATH"'"'; then
-  railway volume add --service "$SERVICE_NAME" --mount-path "$VOLUME_MOUNT_PATH"
+  # The Railway CLI currently expects the service to be linked for volume add;
+  # passing --service directly can panic on some versions.
+  railway volume add --mount-path "$VOLUME_MOUNT_PATH"
 else
   echo "Volume at $VOLUME_MOUNT_PATH already exists; skipping add."
 fi
