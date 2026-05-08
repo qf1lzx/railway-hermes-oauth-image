@@ -8,7 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
+RUN git clone --filter=blob:none https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
     cd /opt/hermes-agent && \
     git checkout ${HERMES_REF} && \
     uv pip install --system --no-cache -e ".[all]" && \
