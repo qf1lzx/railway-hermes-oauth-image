@@ -42,8 +42,16 @@ write_raw_file() {
 append_env_if_set() {
   local key="$1"
   local value="${!key:-}"
-  if [ -n "$value" ] && ! grep -q "^${key}=" "$HERMES_HOME/.env" 2>/dev/null; then
-    printf '%s=%s\n' "$key" "$value" >> "$HERMES_HOME/.env"
+  local tmp
+
+  if [ -n "$value" ]; then
+    tmp="$(mktemp)"
+    if [ -f "$HERMES_HOME/.env" ]; then
+      grep -v "^${key}=" "$HERMES_HOME/.env" > "$tmp" 2>/dev/null || true
+    fi
+    printf '%s=%s\n' "$key" "$value" >> "$tmp"
+    mv "$tmp" "$HERMES_HOME/.env"
+    chmod 600 "$HERMES_HOME/.env"
   fi
 }
 
@@ -154,7 +162,7 @@ for key in \
   OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
   GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY \
   HERMES_WORKSPACE_DRIVE_FOLDER_ID HERMES_SHARED_STATE_SYNC HERMES_SHARED_STATE_PULL_OVERWRITE \
-  HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT; do
+  HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT HERMES_REDACT_SECRETS; do
   append_env_if_set "$key"
 done
 
@@ -168,7 +176,7 @@ python /app/health.py &
 health_pid=$!
 echo "[boot] health server pid=$health_pid"
 
-hermes gateway > "$HERMES_HOME/logs/gateway.log" 2>&1 &
+hermes gateway run > "$HERMES_HOME/logs/gateway.log" 2>&1 &
 gateway_pid=$!
 echo "[boot] gateway pid=$gateway_pid"
 
@@ -179,8 +187,14 @@ cleanup() {
 }
 trap cleanup TERM INT
 
+set +e
 wait -n "$gateway_pid" "$health_pid"
 exit_code=$?
+set -e
 echo "[boot] a child exited with code $exit_code"
+if [ -f "$HERMES_HOME/logs/gateway.log" ]; then
+  echo "[boot] last gateway log lines:"
+  tail -n 80 "$HERMES_HOME/logs/gateway.log" || true
+fi
 cleanup
 exit "$exit_code"
