@@ -35,6 +35,19 @@ set_var_if_present() {
 # the old copy/base64/paste dance.
 set_var_file HERMES_AUTH_JSON "${HERMES_AUTH_JSON_PATH:-$HOME/.hermes/auth.json}"
 set_var_file CODEX_AUTH_JSON "${CODEX_AUTH_JSON_PATH:-$HOME/.codex/auth.json}"
+set_var_file GOOGLE_TOKEN_JSON "${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
+set_var_file GOOGLE_CLIENT_SECRET_JSON "${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
+
+: "${HERMES_WORKSPACE_DRIVE_FOLDER_ID:=10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
+: "${HERMES_SHARED_STATE_SYNC:=drive}"
+set_var_if_present HERMES_WORKSPACE_DRIVE_FOLDER_ID
+set_var_if_present HERMES_SHARED_STATE_SYNC
+set_var_if_present HERMES_SHARED_STATE_PULL_OVERWRITE
+
+if [ "${HERMES_SHARED_STATE_SYNC:-}" = "drive" ] && [ -s "${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}" ]; then
+  echo "publishing non-secret Hermes shared state bundle to Drive"
+  HERMES_WORKSPACE_DRIVE_FOLDER_ID="$HERMES_WORKSPACE_DRIVE_FOLDER_ID" "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts/publish-shared-state-to-drive.sh"
+fi
 
 # Messaging/gateway variables can be exported before running this script.
 for key in \

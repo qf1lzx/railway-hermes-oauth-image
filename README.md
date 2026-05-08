@@ -60,9 +60,15 @@ The script uploads these without printing secret values:
 
 - `~/.hermes/auth.json` → `HERMES_AUTH_JSON`
 - `~/.codex/auth.json` → `CODEX_AUTH_JSON`, if present
+- `~/.hermes/google_token.json` → `GOOGLE_TOKEN_JSON`, if present
+- `~/.hermes/google_client_secret.json` → `GOOGLE_CLIENT_SECRET_JSON`, if present
+- `HERMES_WORKSPACE_DRIVE_FOLDER_ID`
+- `HERMES_SHARED_STATE_SYNC=drive`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USERS`
 - `GATEWAY_ALLOW_ALL_USERS=false`
+
+If Google Workspace credentials are present, it also publishes a non-secret shared-state bundle named `hermes-shared-state.tar.gz` into the configured Drive folder. On Railway boot the container pulls that bundle into `/data/.hermes` before starting the gateway, so cloud Hermes starts with the same shared config/skills/memory notes as local Hermes.
 
 These files/values are **not committed to Git**. `.gitignore` and `.dockerignore` exclude local `.env`, `*.env`, `auth.json`, `*auth*.json`, and secret files so accidental local copies do not get pushed or included in the Docker build context.
 
@@ -90,6 +96,10 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_USERS=123456789
 GATEWAY_ALLOW_ALL_USERS=false
 HERMES_AUTH_JSON={...contents of ~/.hermes/auth.json...}
+GOOGLE_TOKEN_JSON={...contents of ~/.hermes/google_token.json...}
+GOOGLE_CLIENT_SECRET_JSON={...contents of ~/.hermes/google_client_secret.json...}
+HERMES_WORKSPACE_DRIVE_FOLDER_ID=10Io92h6D936VcajyNYJJ9RYFkfKYQyXV
+HERMES_SHARED_STATE_SYNC=drive
 ```
 
 To copy the local auth file:
@@ -129,6 +139,47 @@ export TELEGRAM_ALLOWED_USERS='123456789'
 export GATEWAY_ALLOW_ALL_USERS=false
 ./scripts/push-railway-vars.sh
 ```
+
+## Shared Google Drive workspace and shared Hermes state
+
+This image supports the intended two-agent workflow:
+
+```txt
+Local Mac Hermes
+  - works directly in the Google Drive Desktop-backed Hermes workspace
+  - can publish a shared Hermes state snapshot to Drive
+
+Railway Hermes
+  - uses Google Drive API/OAuth, not a mounted Drive filesystem
+  - hydrates Google OAuth into /data/.hermes
+  - pulls hermes-shared-state.tar.gz from the shared Drive folder on boot
+```
+
+The shared-state bundle intentionally contains only non-secret operational context:
+
+- `config.yaml` with obvious secret-like keys redacted
+- `skills/`
+- `memories/`
+- `hooks/`
+- `MEMORY.md`, `USER.md`, `personality.md` if present
+
+It intentionally excludes `.env`, `auth.json`, Google tokens/client secrets, sessions, logs, cron state, pairings, and caches.
+
+Publish the current local state bundle manually whenever you want cloud Hermes to learn the latest local skills/config/context:
+
+```bash
+cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
+./scripts/publish-shared-state-to-drive.sh
+railway restart --service hermes
+```
+
+From cloud Hermes, a Telegram command can also run:
+
+```bash
+python /app/shared_state_sync.py push
+```
+
+That updates the Drive bundle from Railway's `/data/.hermes` state. Use this deliberately when the cloud agent has learned useful reusable skills/context. Avoid automatic bidirectional overwrites; the bundle is a collaboration handoff, not a live filesystem.
 
 ## Runtime defaults
 

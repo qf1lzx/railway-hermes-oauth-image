@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_NAME="${PROJECT_NAME:-hermes-agent}"
 SERVICE_NAME="${SERVICE_NAME:-hermes}"
 REPO="${REPO:-qf1lzx/railway-hermes-oauth-image}"
 VOLUME_MOUNT_PATH="${VOLUME_MOUNT_PATH:-/data}"
 HERMES_AUTH_JSON_PATH="${HERMES_AUTH_JSON_PATH:-$HOME/.hermes/auth.json}"
 CODEX_AUTH_JSON_PATH="${CODEX_AUTH_JSON_PATH:-$HOME/.codex/auth.json}"
+GOOGLE_TOKEN_JSON_PATH="${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
+GOOGLE_CLIENT_SECRET_JSON_PATH="${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
+HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
+HERMES_SHARED_STATE_SYNC="${HERMES_SHARED_STATE_SYNC:-drive}"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -109,6 +114,26 @@ printf '%s' "$(cat "$HERMES_AUTH_JSON_PATH")" | railway variable set --service "
 
 if [ -s "$CODEX_AUTH_JSON_PATH" ]; then
   printf '%s' "$(cat "$CODEX_AUTH_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" CODEX_AUTH_JSON --stdin --skip-deploys >/dev/null
+fi
+
+if [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
+  printf '%s' "$(cat "$GOOGLE_TOKEN_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" GOOGLE_TOKEN_JSON --stdin --skip-deploys >/dev/null
+else
+  echo "Warning: Google token not found at $GOOGLE_TOKEN_JSON_PATH; Drive workspace sync will not work until GOOGLE_TOKEN_JSON is set." >&2
+fi
+
+if [ -s "$GOOGLE_CLIENT_SECRET_JSON_PATH" ]; then
+  printf '%s' "$(cat "$GOOGLE_CLIENT_SECRET_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" GOOGLE_CLIENT_SECRET_JSON --stdin --skip-deploys >/dev/null
+else
+  echo "Warning: Google client secret not found at $GOOGLE_CLIENT_SECRET_JSON_PATH; Drive workspace sync will not work until GOOGLE_CLIENT_SECRET_JSON is set." >&2
+fi
+
+railway variable set --service "$SERVICE_NAME" "HERMES_WORKSPACE_DRIVE_FOLDER_ID=$HERMES_WORKSPACE_DRIVE_FOLDER_ID" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_SYNC=$HERMES_SHARED_STATE_SYNC" --skip-deploys >/dev/null
+
+if [ "$HERMES_SHARED_STATE_SYNC" = "drive" ] && [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
+  echo "Publishing local non-secret Hermes shared state bundle to Drive"
+  HERMES_WORKSPACE_DRIVE_FOLDER_ID="$HERMES_WORKSPACE_DRIVE_FOLDER_ID" "$ROOT_DIR/scripts/publish-shared-state-to-drive.sh"
 fi
 
 echo "Triggering deployment from the current repo contents"

@@ -62,6 +62,30 @@ write_raw_file HERMES_ENV "$HERMES_HOME/.env"
 write_b64_file CODEX_AUTH_JSON_B64 "$HOME/.codex/auth.json"
 write_raw_file CODEX_AUTH_JSON "$HOME/.codex/auth.json"
 
+# Google Workspace / Drive OAuth for collaboration with the shared Hermes Drive
+# workspace. Railway cannot mount Google Drive Desktop, so it uses Drive API
+# credentials persisted under the Hermes home on the /data volume.
+write_b64_file GOOGLE_TOKEN_JSON_B64 "$HERMES_HOME/google_token.json"
+write_raw_file GOOGLE_TOKEN_JSON "$HERMES_HOME/google_token.json"
+write_b64_file GOOGLE_CLIENT_SECRET_JSON_B64 "$HERMES_HOME/google_client_secret.json"
+write_raw_file GOOGLE_CLIENT_SECRET_JSON "$HERMES_HOME/google_client_secret.json"
+
+if [ -n "${HERMES_SHARED_STATE_TAR_B64:-}" ]; then
+  tmp_bundle="$(mktemp /tmp/hermes-shared-state.XXXXXX.tar.gz)"
+  printf '%s' "$HERMES_SHARED_STATE_TAR_B64" | base64 -d > "$tmp_bundle"
+  tar -xzf "$tmp_bundle" -C "$HERMES_HOME"
+  rm -f "$tmp_bundle"
+  echo "[boot] unpacked HERMES_SHARED_STATE_TAR_B64 into $HERMES_HOME"
+fi
+
+if [ "${HERMES_SHARED_STATE_SYNC:-}" = "drive" ] && [ -n "${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-}" ] && [ -s "$HERMES_HOME/google_token.json" ]; then
+  sync_args=(pull)
+  if [ "${HERMES_SHARED_STATE_PULL_OVERWRITE:-false}" = "true" ]; then
+    sync_args+=(--overwrite)
+  fi
+  python /app/shared_state_sync.py "${sync_args[@]}" || echo "[boot] WARNING: Drive shared-state pull failed; continuing without it"
+fi
+
 if [ ! -f "$HERMES_HOME/.env" ]; then
   touch "$HERMES_HOME/.env"
   chmod 600 "$HERMES_HOME/.env"
@@ -136,6 +160,7 @@ for key in \
   FIRECRAWL_API_KEY TAVILY_API_KEY EXA_API_KEY FAL_KEY FAL_API_KEY \
   OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
   GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY \
+  HERMES_WORKSPACE_DRIVE_FOLDER_ID HERMES_SHARED_STATE_SYNC HERMES_SHARED_STATE_PULL_OVERWRITE \
   HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT; do
   append_env_if_set "$key"
 done

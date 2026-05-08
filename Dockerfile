@@ -17,7 +17,8 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 
 COPY entrypoint.sh /app/entrypoint.sh
 COPY health.py /app/health.py
-RUN chmod +x /app/entrypoint.sh && mkdir -p /data/.hermes
+COPY shared_state_sync.py /app/shared_state_sync.py
+RUN chmod +x /app/entrypoint.sh /app/shared_state_sync.py && mkdir -p /data/.hermes
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
