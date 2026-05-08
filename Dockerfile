@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-ARG HERMES_REF=v2026.5.7
+ARG HERMES_REF=5643c297901312d817713a8cc870a28a439e3114
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates git tini && \
@@ -8,8 +8,9 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
     cd /opt/hermes-agent && \
+    git checkout ${HERMES_REF} && \
     uv pip install --system --no-cache -e ".[all]" && \
     if [ -d web ]; then cd web && npm install --silent && npm run build && cd /opt/hermes-agent; fi && \
     if [ -d ui-tui ]; then cd ui-tui && npm install --silent --no-fund --no-audit --progress=false && npm run build && cd /opt/hermes-agent; fi && \
@@ -18,7 +19,8 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 COPY entrypoint.sh /app/entrypoint.sh
 COPY health.py /app/health.py
 COPY shared_state_sync.py /app/shared_state_sync.py
-RUN chmod +x /app/entrypoint.sh /app/shared_state_sync.py && mkdir -p /data/.hermes
+COPY scripts/hermes-cloud-auth.sh /usr/local/bin/hermes-cloud-auth
+RUN chmod +x /app/entrypoint.sh /app/shared_state_sync.py /usr/local/bin/hermes-cloud-auth && mkdir -p /data/.hermes
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes

@@ -47,22 +47,15 @@ append_env_if_set() {
   fi
 }
 
-# Preferred: simple raw Railway variables. B64 variants remain supported for
-# large/multiline secrets and backwards compatibility.
-write_b64_file HERMES_AUTH_JSON_B64 "$HERMES_HOME/auth.json"
-write_raw_file HERMES_AUTH_JSON "$HERMES_HOME/auth.json"
+# Preferred: run `hermes-cloud-auth` inside Railway so OAuth tokens are created
+# by the cloud runtime and persisted on the /data volume. Config/env hydration
+# remains supported for non-OAuth settings.
 write_b64_file HERMES_CONFIG_YAML_B64 "$HERMES_HOME/config.yaml"
 write_raw_file HERMES_CONFIG_YAML "$HERMES_HOME/config.yaml"
 write_b64_file HERMES_ENV_B64 "$HERMES_HOME/.env"
 write_raw_file HERMES_ENV "$HERMES_HOME/.env"
 
-# Some Codex setups can reuse the Codex CLI credential file. If the user has it,
-# let Railway hydrate it directly too. Hermes still prefers its own auth store
-# when HERMES_AUTH_JSON is present.
-write_b64_file CODEX_AUTH_JSON_B64 "$HOME/.codex/auth.json"
-write_raw_file CODEX_AUTH_JSON "$HOME/.codex/auth.json"
-
-# Google Workspace / Drive OAuth for collaboration with the shared Hermes Drive
+# Optional Google Workspace / Drive OAuth for collaboration with the shared Hermes Drive
 # workspace. Railway cannot mount Google Drive Desktop, so it uses Drive API
 # credentials persisted under the Hermes home on the /data volume.
 write_b64_file GOOGLE_TOKEN_JSON_B64 "$HERMES_HOME/google_token.json"
@@ -165,8 +158,8 @@ for key in \
   append_env_if_set "$key"
 done
 
-if [ ! -s "$HERMES_HOME/auth.json" ] && [ ! -s "$HOME/.codex/auth.json" ]; then
-  echo "[boot] WARNING: no OAuth credentials found. For Codex/Nous subscriptions set HERMES_AUTH_JSON or HERMES_AUTH_JSON_B64 once, or CODEX_AUTH_JSON for Codex CLI credentials."
+if [ ! -s "$HERMES_HOME/auth.json" ]; then
+  echo "[boot] WARNING: no cloud OAuth credentials found. After deploy, run: railway ssh --service <service> then hermes-cloud-auth. Copy/paste the printed OAuth links into your browser; tokens are written to $HERMES_HOME/auth.json on the /data volume."
 fi
 
 # Gateway-only runtime. Railway still expects an HTTP listener for health checks,

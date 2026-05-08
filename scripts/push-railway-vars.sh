@@ -31,10 +31,9 @@ set_var_if_present() {
   fi
 }
 
-# Plain, non-base64 variables. Railway supports multiline values, so this avoids
-# the old copy/base64/paste dance.
-set_var_file HERMES_AUTH_JSON "${HERMES_AUTH_JSON_PATH:-$HOME/.hermes/auth.json}"
-set_var_file CODEX_AUTH_JSON "${CODEX_AUTH_JSON_PATH:-$HOME/.codex/auth.json}"
+# Plain, non-base64 variables. Do not push local Hermes/Codex OAuth token
+# files to Railway; run `hermes-cloud-auth` inside the Railway container so the
+# cloud deployment owns its own persistent /data OAuth store.
 set_var_file GOOGLE_TOKEN_JSON "${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
 set_var_file GOOGLE_CLIENT_SECRET_JSON "${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
 

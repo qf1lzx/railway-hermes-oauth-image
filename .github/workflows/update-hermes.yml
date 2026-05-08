@@ -1,9 +1,10 @@
-name: Update Hermes Agent
+name: Track upstream Hermes main
 
 on:
   schedule:
-    # Check once per day. Railway will redeploy when this workflow pushes a commit.
-    - cron: "17 6 * * *"
+    # Railway native template updates watch this repo. This workflow bridges
+    # NousResearch/hermes-agent main -> a commit in this template repo.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,32 +14,61 @@ jobs:
   update-hermes-ref:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout template repo
         uses: actions/checkout@v4
 
-      - name: Update Dockerfile to latest Hermes release
+      - name: Read latest upstream Hermes main SHA
+        id: upstream
         shell: bash
         run: |
           set -euo pipefail
-
-          latest_tag="$(
-            curl -fsSL https://api.github.com/repos/NousResearch/hermes-agent/releases/latest \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])'
-          )"
-
-          current_tag="$(sed -n 's/^ARG HERMES_REF=//p' Dockerfile | head -1)"
-          echo "Current Hermes ref: ${current_tag}"
-          echo "Latest Hermes ref:  ${latest_tag}"
-
-          if [ "${current_tag}" = "${latest_tag}" ]; then
-            echo "Already up to date."
-            exit 0
+          sha="$(git ls-remote https://github.com/NousResearch/hermes-agent.git refs/heads/main | cut -f1)"
+          if [ -z "$sha" ]; then
+            echo "Failed to resolve upstream Hermes main SHA" >&2
+            exit 1
           fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Latest upstream SHA: $sha"
 
-          python3 -c "from pathlib import Path; p=Path('Dockerfile'); s=p.read_text(); s=s.replace('ARG HERMES_REF=${current_tag}', 'ARG HERMES_REF=${latest_tag}'); p.write_text(s)"
+      - name: Read current Dockerfile ref
+        id: current
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(sed -n 's/^ARG HERMES_REF=//p' Dockerfile | head -1)"
+          echo "ref=$current" >> "$GITHUB_OUTPUT"
+          echo "Current Dockerfile ref: $current"
+
+      - name: Update Dockerfile ref
+        if: steps.upstream.outputs.sha != steps.current.outputs.ref
+        shell: bash
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          dockerfile = Path("Dockerfile")
+          text = dockerfile.read_text()
+          sha = os.environ["UPSTREAM_SHA"]
+          new_text, count = re.subn(
+              r"^ARG HERMES_REF=.*$",
+              f"ARG HERMES_REF={sha}",
+              text,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if count != 1:
+              raise SystemExit("Expected exactly one ARG HERMES_REF line in Dockerfile")
+          dockerfile.write_text(new_text)
+          PY
 
       - name: Commit and push update
+        if: steps.upstream.outputs.sha != steps.current.outputs.ref
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore: update Hermes Agent to latest release"
+          commit_message: "chore: track Hermes upstream ${{ steps.upstream.outputs.sha }}"
           file_pattern: Dockerfile

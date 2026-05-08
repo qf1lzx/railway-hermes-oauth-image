@@ -6,8 +6,6 @@ PROJECT_NAME="${PROJECT_NAME:-hermes-agent}"
 SERVICE_NAME="${SERVICE_NAME:-hermes}"
 REPO="${REPO:-qf1lzx/railway-hermes-oauth-image}"
 VOLUME_MOUNT_PATH="${VOLUME_MOUNT_PATH:-/data}"
-HERMES_AUTH_JSON_PATH="${HERMES_AUTH_JSON_PATH:-$HOME/.hermes/auth.json}"
-CODEX_AUTH_JSON_PATH="${CODEX_AUTH_JSON_PATH:-$HOME/.codex/auth.json}"
 GOOGLE_TOKEN_JSON_PATH="${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
 GOOGLE_CLIENT_SECRET_JSON_PATH="${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
 HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
@@ -25,38 +23,6 @@ need_cmd railway
 if ! railway whoami >/dev/null 2>&1; then
   echo "Railway CLI is not logged in. Run: railway login" >&2
   exit 1
-fi
-
-if [ ! -s "$HERMES_AUTH_JSON_PATH" ]; then
-  cat >&2 <<EOF
-Missing Hermes OAuth auth file: $HERMES_AUTH_JSON_PATH
-
-This deploy needs local OAuth state for your Nous + Codex subscriptions.
-EOF
-
-  if command -v hermes >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
-    read -rp "Start local Hermes OAuth login now? This opens/prints provider auth links. [Y/n] " START_OAUTH
-    START_OAUTH="${START_OAUTH:-Y}"
-    if [[ "$START_OAUTH" =~ ^[Yy]$ ]]; then
-      echo "Starting OpenAI Codex OAuth..."
-      hermes auth add openai-codex --type oauth
-      echo "Starting Nous OAuth..."
-      hermes auth add nous --type oauth
-    fi
-  fi
-
-  if [ ! -s "$HERMES_AUTH_JSON_PATH" ]; then
-    cat >&2 <<EOF
-
-Still missing: $HERMES_AUTH_JSON_PATH
-
-Run locally first, then rerun this script:
-  hermes auth add openai-codex --type oauth
-  hermes auth add nous --type oauth
-  hermes auth list
-EOF
-    exit 1
-  fi
 fi
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then
@@ -110,11 +76,6 @@ echo "Setting Railway variables without printing secret values"
 printf '%s' "$TELEGRAM_BOT_TOKEN" | railway variable set --service "$SERVICE_NAME" TELEGRAM_BOT_TOKEN --stdin --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "TELEGRAM_ALLOWED_USERS=$TELEGRAM_ALLOWED_USERS" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GATEWAY_ALLOW_ALL_USERS=false" --skip-deploys >/dev/null
-printf '%s' "$(cat "$HERMES_AUTH_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" HERMES_AUTH_JSON --stdin --skip-deploys >/dev/null
-
-if [ -s "$CODEX_AUTH_JSON_PATH" ]; then
-  printf '%s' "$(cat "$CODEX_AUTH_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" CODEX_AUTH_JSON --stdin --skip-deploys >/dev/null
-fi
 
 if [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
   printf '%s' "$(cat "$GOOGLE_TOKEN_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" GOOGLE_TOKEN_JSON --stdin --skip-deploys >/dev/null
@@ -143,6 +104,12 @@ cat <<EOF
 
 Done.
 Project/service should now deploy on Railway.
+
+Cloud OAuth setup, once the container is deployed:
+  railway ssh --service $SERVICE_NAME
+  hermes-cloud-auth
+  exit
+  railway restart --service $SERVICE_NAME
 
 Next checks:
   railway status

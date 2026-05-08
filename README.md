@@ -27,16 +27,25 @@ So until this is published from the Railway Templates UI, use one of the two set
 
 ## Fastest setup: one local script
 
-This creates/uses a Railway project, adds the GitHub-backed service, attaches the `/data` volume, uploads your local OAuth files as Railway variables, and triggers a deployment.
+This creates/uses a Railway project, adds the GitHub-backed service, attaches the `/data` volume, sets gateway variables, and triggers a deployment.
 
-If `~/.hermes/auth.json` does not exist yet, the script can start the local Hermes OAuth flows for you. Those commands open or print the provider auth links for **OpenAI Codex** and **Nous**, then the script uploads the resulting local auth state to Railway without printing it.
+OAuth is **not** copied from your Mac. After the first deploy, SSH into the Railway container and run `hermes-cloud-auth`; it prints the OAuth links/device-code prompts in the Railway shell, you copy/paste them into your browser, and Hermes writes the cloud-owned token store to `/data/.hermes/auth.json`.
 
 ```bash
 cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
 ./scripts/create-railway-project.sh
 ```
 
-It will ask for:
+After Railway deploys:
+
+```bash
+railway ssh --service hermes
+hermes-cloud-auth
+exit
+railway restart --service hermes
+```
+
+The setup script will ask for:
 
 ```txt
 Telegram bot token from @BotFather
@@ -56,17 +65,15 @@ export TELEGRAM_ALLOWED_USERS='123456789'
 ./scripts/create-railway-project.sh
 ```
 
-The script uploads these without printing secret values:
+The script sets these Railway variables without printing secret values:
 
-- `~/.hermes/auth.json` → `HERMES_AUTH_JSON`
-- `~/.codex/auth.json` → `CODEX_AUTH_JSON`, if present
-- `~/.hermes/google_token.json` → `GOOGLE_TOKEN_JSON`, if present
-- `~/.hermes/google_client_secret.json` → `GOOGLE_CLIENT_SECRET_JSON`, if present
-- `HERMES_WORKSPACE_DRIVE_FOLDER_ID`
-- `HERMES_SHARED_STATE_SYNC=drive`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USERS`
 - `GATEWAY_ALLOW_ALL_USERS=false`
+- `GOOGLE_TOKEN_JSON`, if present
+- `GOOGLE_CLIENT_SECRET_JSON`, if present
+- `HERMES_WORKSPACE_DRIVE_FOLDER_ID`
+- `HERMES_SHARED_STATE_SYNC=drive`
 
 If Google Workspace credentials are present, it also publishes a non-secret shared-state bundle named `hermes-shared-state.tar.gz` into the configured Drive folder. On Railway boot the container pulls that bundle into `/data/.hermes` before starting the gateway, so cloud Hermes starts with the same shared config/skills/memory notes as local Hermes.
 
@@ -95,38 +102,41 @@ qf1lzx/railway-hermes-oauth-image
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALLOWED_USERS=123456789
 GATEWAY_ALLOW_ALL_USERS=false
-HERMES_AUTH_JSON={...contents of ~/.hermes/auth.json...}
-GOOGLE_TOKEN_JSON={...contents of ~/.hermes/google_token.json...}
-GOOGLE_CLIENT_SECRET_JSON={...contents of ~/.hermes/google_client_secret.json...}
 HERMES_WORKSPACE_DRIVE_FOLDER_ID=10Io92h6D936VcajyNYJJ9RYFkfKYQyXV
 HERMES_SHARED_STATE_SYNC=drive
 ```
 
-To copy the local auth file:
+5. Deploy, then run cloud OAuth inside the Railway container:
 
 ```bash
-pbcopy < ~/.hermes/auth.json
+railway ssh --service hermes
+hermes-cloud-auth
+exit
+railway restart --service hermes
 ```
 
-That is it. You do **not** need to base64 encode config/env files.
+Do **not** paste your Mac's `~/.hermes/auth.json` into Railway for normal setup. The cloud deployment gets its own OAuth token store at `/data/.hermes/auth.json`.
 
-## Why any auth JSON is still needed
+## Why cloud OAuth is still needed
 
-Codex subscription auth and Nous subscription auth are OAuth refresh-token flows. Railway cannot magically log into your browser account for you. The only unavoidable step is exporting the OAuth credential file from a machine where you already logged in.
+Codex subscription auth and Nous subscription auth are OAuth refresh-token flows. Railway cannot magically log into your browser account for you, but the login should happen **from the Railway/VPS environment**, not by copying your Mac's token file. `hermes-cloud-auth` runs the provider login commands on Railway and prints the URLs/codes for you to open in your browser.
 
-On your Mac:
+Run once after the service is deployed:
 
 ```bash
-hermes auth add openai-codex --type oauth
-hermes auth add nous --type oauth
-hermes auth list
+railway ssh --service hermes
+hermes-cloud-auth
+exit
+railway restart --service hermes
 ```
 
-Then use either the setup script or paste the raw file contents into Railway as `HERMES_AUTH_JSON`:
+That writes cloud-owned credentials to:
 
-```bash
-pbcopy < ~/.hermes/auth.json
+```txt
+/data/.hermes/auth.json
 ```
+
+The file lives on the Railway `/data` volume, so it survives rebuilds/redeploys and stays separate from your local Mac OAuth store.
 
 ## Optional: push local secrets to an already-linked Railway service
 
@@ -214,10 +224,24 @@ Advanced users can still provide raw or base64 config/env files:
 ```env
 HERMES_CONFIG_YAML=...
 HERMES_ENV=...
-HERMES_AUTH_JSON_B64=...
 HERMES_CONFIG_YAML_B64=...
 HERMES_ENV_B64=...
 ```
+
+## Updates
+
+This repo is designed to use Railway's native template-update path: Railway tracks commits to the template repo's root branch. The included GitHub Action bridges Hermes upstream into that native path:
+
+```txt
+NousResearch/hermes-agent main changes
+→ .github/workflows/update-hermes.yml updates Dockerfile ARG HERMES_REF=<upstream-sha>
+→ workflow commits to this template repo
+→ Railway sees the template repo changed
+→ deployed projects can rebuild/redeploy from the new image
+→ /data keeps cloud OAuth/config/sessions
+```
+
+`HERMES_REF` is pinned to an upstream SHA for reproducibility. Do not rely on `hermes update` inside Railway for the default flow.
 
 ## Health check
 
@@ -235,6 +259,6 @@ hermes gateway container ok
 
 ## Caveats
 
-- Treat `HERMES_AUTH_JSON` like a password. It contains refresh tokens.
+- Do not paste local `~/.hermes/auth.json` into Railway for normal setup. Run `hermes-cloud-auth` in `railway ssh` and copy/paste the printed OAuth links into your browser so Railway creates its own `/data/.hermes/auth.json`.
 - Railway is Linux; Mac-only local integrations like Cua Driver, BlueBubbles/iMessage, and Spotify AppleScript will not work inside this container.
 - A real one-click Railway template link requires creating/publishing a template from Railway's Templates UI. This repo is ready for that, but the generic GitHub URL is not a marketplace template code.
