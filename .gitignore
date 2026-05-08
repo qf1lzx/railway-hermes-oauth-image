@@ -1,3 +1,15 @@
+# Local setup files / secrets. Do not commit real auth or env state.
+.env
+.env.*
+*.env
 railway-config.yaml
 railway-hermes.env
+
+# OAuth/session credential files that users may copy here accidentally.
+auth.json
+codex-auth.json
+*auth*.json
+*.secret
+*.secrets
+
 .DS_Store

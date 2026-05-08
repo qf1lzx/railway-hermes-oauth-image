@@ -23,6 +23,5 @@ ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
 ENV PORT=8080
 
-VOLUME ["/data"]
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 CMD ["/app/entrypoint.sh"]

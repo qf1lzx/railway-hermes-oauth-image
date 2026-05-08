@@ -29,6 +29,8 @@ So until this is published from the Railway Templates UI, use one of the two set
 
 This creates/uses a Railway project, adds the GitHub-backed service, attaches the `/data` volume, uploads your local OAuth files as Railway variables, and triggers a deployment.
 
+If `~/.hermes/auth.json` does not exist yet, the script can start the local Hermes OAuth flows for you. Those commands open or print the provider auth links for **OpenAI Codex** and **Nous**, then the script uploads the resulting local auth state to Railway without printing it.
+
 ```bash
 cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
 ./scripts/create-railway-project.sh
@@ -61,6 +63,8 @@ The script uploads these without printing secret values:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USERS`
 - `GATEWAY_ALLOW_ALL_USERS=false`
+
+These files/values are **not committed to Git**. `.gitignore` and `.dockerignore` exclude local `.env`, `*.env`, `auth.json`, `*auth*.json`, and secret files so accidental local copies do not get pushed or included in the Docker build context.
 
 ## Manual Railway UI setup
 

@@ -26,11 +26,32 @@ if [ ! -s "$HERMES_AUTH_JSON_PATH" ]; then
   cat >&2 <<EOF
 Missing Hermes OAuth auth file: $HERMES_AUTH_JSON_PATH
 
-Run locally first:
+This deploy needs local OAuth state for your Nous + Codex subscriptions.
+EOF
+
+  if command -v hermes >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then
+    read -rp "Start local Hermes OAuth login now? This opens/prints provider auth links. [Y/n] " START_OAUTH
+    START_OAUTH="${START_OAUTH:-Y}"
+    if [[ "$START_OAUTH" =~ ^[Yy]$ ]]; then
+      echo "Starting OpenAI Codex OAuth..."
+      hermes auth add openai-codex --type oauth
+      echo "Starting Nous OAuth..."
+      hermes auth add nous --type oauth
+    fi
+  fi
+
+  if [ ! -s "$HERMES_AUTH_JSON_PATH" ]; then
+    cat >&2 <<EOF
+
+Still missing: $HERMES_AUTH_JSON_PATH
+
+Run locally first, then rerun this script:
   hermes auth add openai-codex --type oauth
   hermes auth add nous --type oauth
+  hermes auth list
 EOF
-  exit 1
+    exit 1
+  fi
 fi
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ]; then

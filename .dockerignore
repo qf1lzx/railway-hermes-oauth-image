@@ -1,6 +1,14 @@
 .git
 .gitignore
+.env
+.env.*
+*.env
 railway-config.yaml
 railway-hermes.env
+auth.json
+codex-auth.json
+*auth*.json
+*.secret
+*.secrets
 .DS_Store
 README.md
