@@ -14,8 +14,17 @@ echo "This creates cloud-owned OAuth tokens on the persistent Railway volume."
 echo "Copy/paste each printed OAuth link or device-code URL into your normal browser when prompted."
 echo
 
-hermes auth add openai-codex --type oauth
-hermes auth add nous --type oauth
+auth_provider() {
+  local provider="$1"
+  if hermes auth status "$provider" 2>/dev/null | grep -q 'logged in'; then
+    echo "$provider already logged in; skipping"
+  else
+    hermes auth add "$provider" --type oauth --no-browser
+  fi
+}
+
+auth_provider openai-codex
+auth_provider nous
 
 echo
 echo "Verifying cloud auth store..."

@@ -1,0 +1,42 @@
+name: Deploy Railway Hermes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "railway.toml"
+      - "entrypoint.sh"
+      - "health.py"
+      - "shared_state_sync.py"
+      - "scripts/**"
+      - ".github/workflows/deploy-railway.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: railway-hermes-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT || vars.RAILWAY_ENVIRONMENT }}
+      RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${RAILWAY_PROJECT_ID:=5d0f42a5-b3ee-405b-9688-1f06779d39e0}"
+          : "${RAILWAY_ENVIRONMENT:=production}"
+          : "${RAILWAY_SERVICE:=hermes}"
+          railway up --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT" --service "$RAILWAY_SERVICE" --detach

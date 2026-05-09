@@ -10,6 +10,10 @@ GOOGLE_TOKEN_JSON_PATH="${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.jso
 GOOGLE_CLIENT_SECRET_JSON_PATH="${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
 HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
 HERMES_SHARED_STATE_SYNC="${HERMES_SHARED_STATE_SYNC:-drive}"
+HERMES_SHARED_STATE_PULL_OVERWRITE="${HERMES_SHARED_STATE_PULL_OVERWRITE:-true}"
+LOCAL_HERMES_HOME="${LOCAL_HERMES_HOME:-$HOME/.hermes}"
+RUN_CLOUD_AUTH="${RUN_CLOUD_AUTH:-true}"
+RUN_SMOKE_TESTS="${RUN_SMOKE_TESTS:-true}"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -19,6 +23,38 @@ need_cmd() {
 }
 
 need_cmd railway
+need_cmd python
+need_cmd base64
+
+railway_ssh() {
+  local args=(ssh --service "$SERVICE_NAME")
+  if [ -n "${RAILWAY_SSH_IDENTITY_FILE:-}" ]; then
+    args+=(--identity-file "$RAILWAY_SSH_IDENTITY_FILE")
+  fi
+  railway "${args[@]}" "$@"
+}
+
+wait_for_railway_ssh() {
+  local attempt
+  for attempt in $(seq 1 30); do
+    if railway_ssh 'echo ssh_ready' >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "Waiting for Railway SSH/deployment to become ready ($attempt/30)..."
+    sleep 10
+  done
+  echo "Timed out waiting for Railway SSH/deployment readiness." >&2
+  return 1
+}
+
+hydrate_shared_state_to_cloud() {
+  local bundle
+  bundle="$(mktemp /tmp/hermes-shared-state.XXXXXX.tar.gz)"
+  python "$ROOT_DIR/shared_state_sync.py" pack --home "$LOCAL_HERMES_HOME" --output "$bundle"
+  echo "Hydrating non-secret local Hermes shared state into Railway /data volume"
+  base64 < "$bundle" | railway_ssh 'export HOME=/data HERMES_HOME=/data/.hermes; tmp=$(mktemp /tmp/hermes-shared-state.XXXXXX.tar.gz); base64 -d > "$tmp"; tar -xzf "$tmp" -C "$HERMES_HOME"; rm -f "$tmp"; echo "hydrated $HERMES_HOME from local shared-state bundle"'
+  rm -f "$bundle"
+}
 
 if ! railway whoami >/dev/null 2>&1; then
   echo "Railway CLI is not logged in. Run: railway login" >&2
@@ -91,30 +127,46 @@ fi
 
 railway variable set --service "$SERVICE_NAME" "HERMES_WORKSPACE_DRIVE_FOLDER_ID=$HERMES_WORKSPACE_DRIVE_FOLDER_ID" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_SYNC=$HERMES_SHARED_STATE_SYNC" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_PULL_OVERWRITE=$HERMES_SHARED_STATE_PULL_OVERWRITE" --skip-deploys >/dev/null
 
 if [ "$HERMES_SHARED_STATE_SYNC" = "drive" ] && [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
   echo "Publishing local non-secret Hermes shared state bundle to Drive"
-  HERMES_WORKSPACE_DRIVE_FOLDER_ID="$HERMES_WORKSPACE_DRIVE_FOLDER_ID" "$ROOT_DIR/scripts/publish-shared-state-to-drive.sh"
+  if ! HERMES_HOME="$LOCAL_HERMES_HOME" HERMES_WORKSPACE_DRIVE_FOLDER_ID="$HERMES_WORKSPACE_DRIVE_FOLDER_ID" "$ROOT_DIR/scripts/publish-shared-state-to-drive.sh"; then
+    echo "Warning: Drive shared-state publish failed; continuing with direct Railway hydration." >&2
+  fi
 fi
 
 echo "Triggering deployment from the current repo contents"
 railway up --service "$SERVICE_NAME" --detach
 
+wait_for_railway_ssh
+hydrate_shared_state_to_cloud
+
+if [ "$RUN_CLOUD_AUTH" = "true" ]; then
+  cat <<EOF
+
+Starting cloud OAuth bootstrap inside Railway.
+Approve the printed Codex/Nous device-code URLs in your browser when prompted.
+Set RUN_CLOUD_AUTH=false to skip this step on future runs when /data/.hermes/auth.json is already valid.
+EOF
+  railway_ssh 'export HOME=/data HERMES_HOME=/data/.hermes; hermes-cloud-auth'
+  railway restart --service "$SERVICE_NAME" --yes || railway restart --service "$SERVICE_NAME"
+fi
+
+if [ "$RUN_SMOKE_TESTS" = "true" ]; then
+  echo "Running Railway Hermes smoke test"
+  wait_for_railway_ssh
+  railway_ssh 'export HOME=/data HERMES_HOME=/data/.hermes; timeout 180 hermes chat -q "Reply with exactly RAILWAY_OK" --quiet --toolsets ""'
+fi
+
 cat <<EOF
 
 Done.
-Project/service should now deploy on Railway.
+Project/service is deployed, local shared state has been hydrated into Railway, and cloud OAuth/smoke tests ran unless disabled.
 
-Cloud OAuth setup, once the container is deployed:
-  railway ssh --service $SERVICE_NAME
-  hermes-cloud-auth
-  exit
-  railway restart --service $SERVICE_NAME
-
-Next checks:
+Useful checks:
   railway status
   railway logs --service $SERVICE_NAME --lines 100
-  railway open
 
 If you want a public Railway URL for /health:
   railway domain --service $SERVICE_NAME --port 8080
