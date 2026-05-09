@@ -93,6 +93,8 @@ GSTACK_AUTO_SETUP=true
 GSTACK_HOSTS=codex,claude
 GSTACK_TEAM_MODE=false
 GSTACK_SKILL_PREFIX=false
+GSTACK_PLAYWRIGHT_BROWSERS_PATH=/tmp/ms-playwright
+GSTACK_CLEAN_PLAYWRIGHT_CACHE=true
 ```
 
 You can override those per Railway service with `./scripts/push-railway-vars.sh` or during first setup:

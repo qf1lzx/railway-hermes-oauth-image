@@ -15,6 +15,13 @@ mkdir -p "$HERMES_HOME" \
 chmod 700 "$HERMES_HOME" "$HOME/.codex" "$HOME/.claude" "$HOME/.gstack" || true
 rm -f "$HERMES_HOME/gateway.pid"
 
+# gstack/Playwright can be large. If an earlier boot wrote browser caches to the
+# persistent volume, clear them before hydrating secrets so a full volume can
+# recover automatically. Runtime gstack setup uses /tmp for Playwright browsers.
+if [ "${GSTACK_CLEAN_PLAYWRIGHT_CACHE:-true}" = "true" ]; then
+  rm -rf "$HOME/Library/Caches/ms-playwright" "$HOME/.cache/ms-playwright" 2>/dev/null || true
+fi
+
 write_b64_file() {
   local var_name="$1"
   local target="$2"
@@ -162,7 +169,7 @@ for key in \
   OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
   GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY \
   HERMES_WORKSPACE_DRIVE_FOLDER_ID HERMES_SHARED_STATE_SYNC HERMES_SHARED_STATE_PULL_OVERWRITE \
-  GSTACK_AUTO_SETUP GSTACK_HOSTS GSTACK_TEAM_MODE GSTACK_SKILL_PREFIX GSTACK_REPO GSTACK_REF GSTACK_UPDATE_ON_BOOT \
+  GSTACK_AUTO_SETUP GSTACK_HOSTS GSTACK_TEAM_MODE GSTACK_SKILL_PREFIX GSTACK_REPO GSTACK_REF GSTACK_UPDATE_ON_BOOT GSTACK_PLAYWRIGHT_BROWSERS_PATH GSTACK_CLEAN_PLAYWRIGHT_CACHE \
   HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT HERMES_REDACT_SECRETS; do
   append_env_if_set "$key"
 done

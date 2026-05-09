@@ -73,6 +73,8 @@ set_var_if_present GSTACK_SKILL_PREFIX
 set_var_if_present GSTACK_REPO
 set_var_if_present GSTACK_REF
 set_var_if_present GSTACK_UPDATE_ON_BOOT
+set_var_if_present GSTACK_PLAYWRIGHT_BROWSERS_PATH
+set_var_if_present GSTACK_CLEAN_PLAYWRIGHT_CACHE
 set_var_if_present CLIENT_NAME
 set_var_if_present CLIENT_SLUG
 

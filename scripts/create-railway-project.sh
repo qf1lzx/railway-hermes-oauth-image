@@ -17,6 +17,8 @@ GSTACK_AUTO_SETUP="${GSTACK_AUTO_SETUP:-true}"
 GSTACK_HOSTS="${GSTACK_HOSTS:-codex,claude}"
 GSTACK_TEAM_MODE="${GSTACK_TEAM_MODE:-false}"
 GSTACK_SKILL_PREFIX="${GSTACK_SKILL_PREFIX:-false}"
+GSTACK_PLAYWRIGHT_BROWSERS_PATH="${GSTACK_PLAYWRIGHT_BROWSERS_PATH:-/tmp/ms-playwright}"
+GSTACK_CLEAN_PLAYWRIGHT_CACHE="${GSTACK_CLEAN_PLAYWRIGHT_CACHE:-true}"
 CLIENT_NAME="${CLIENT_NAME:-}"
 CLIENT_SLUG="${CLIENT_SLUG:-}"
 LOCAL_HERMES_HOME="${LOCAL_HERMES_HOME:-$HOME/.hermes}"
@@ -156,6 +158,8 @@ railway variable set --service "$SERVICE_NAME" "GSTACK_AUTO_SETUP=$GSTACK_AUTO_S
 railway variable set --service "$SERVICE_NAME" "GSTACK_HOSTS=$GSTACK_HOSTS" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GSTACK_TEAM_MODE=$GSTACK_TEAM_MODE" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GSTACK_SKILL_PREFIX=$GSTACK_SKILL_PREFIX" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_PLAYWRIGHT_BROWSERS_PATH=$GSTACK_PLAYWRIGHT_BROWSERS_PATH" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_CLEAN_PLAYWRIGHT_CACHE=$GSTACK_CLEAN_PLAYWRIGHT_CACHE" --skip-deploys >/dev/null
 if [ -n "$CLIENT_NAME" ]; then
   railway variable set --service "$SERVICE_NAME" "CLIENT_NAME=$CLIENT_NAME" --skip-deploys >/dev/null
 fi
