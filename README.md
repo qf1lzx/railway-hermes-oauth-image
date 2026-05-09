@@ -6,6 +6,7 @@ A Railway-ready, gateway-only Hermes Agent container for using:
 - **Nous subscription** for delegation + auxiliary models
 - **Telegram/Discord/Slack/etc.** as the interface
 - **Railway volume at `/data`** for persistent state
+- **gstack auto-setup** for Codex/Claude-style client workflows
 
 No admin dashboard is included. Railway only exposes a tiny `/health` endpoint; you talk to Hermes through the messaging gateway.
 
@@ -76,10 +77,52 @@ The script sets these Railway variables without printing secret values. Secret a
 - `GOOGLE_CLIENT_SECRET_JSON`, if present
 - `HERMES_WORKSPACE_DRIVE_FOLDER_ID`
 - `HERMES_SHARED_STATE_SYNC=drive`
+- `GSTACK_AUTO_SETUP=true`
+- `GSTACK_HOSTS=codex,claude`
 
 If Google Workspace credentials are present, it also publishes a non-secret shared-state bundle named `hermes-shared-state.tar.gz` into the configured Drive folder. On Railway boot the container pulls that bundle into `/data/.hermes` before starting the gateway, so cloud Hermes starts with the same shared config/skills/memory notes as local Hermes.
 
 These files/values are **not committed to Git**. `.gitignore` and `.dockerignore` exclude local `.env`, `*.env`, `auth.json`, `*auth*.json`, and secret files so accidental local copies do not get pushed or included in the Docker build context.
+
+## Client/project bootstrap with gstack
+
+The image now auto-installs [gstack](https://github.com/garrytan/gstack) on Railway boot by default. It installs into the persistent `/data` home and links skills for Codex/Claude-style agents. The setup runs in the background after the `/health` server starts, so Railway health checks are not blocked; logs go to `/data/.hermes/logs/gstack-setup.log`.
+
+```env
+GSTACK_AUTO_SETUP=true
+GSTACK_HOSTS=codex,claude
+GSTACK_TEAM_MODE=false
+GSTACK_SKILL_PREFIX=false
+```
+
+You can override those per Railway service with `./scripts/push-railway-vars.sh` or during first setup:
+
+```bash
+export PROJECT_NAME='acme-hermes'
+export SERVICE_NAME='hermes'
+export CLIENT_NAME='Acme Corp'
+export CLIENT_SLUG='acme'
+export GSTACK_AUTO_SETUP=true
+export GSTACK_HOSTS='codex,claude'
+./scripts/create-railway-project.sh
+```
+
+For a future client's actual app/code repo, initialize repo-level gstack team mode locally:
+
+```bash
+cd /path/to/client-app-repo
+CLIENT_NAME='Acme Corp' /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image/scripts/setup-client-gstack.sh .
+```
+
+That script:
+
+- installs/updates global gstack under `~/.claude/skills/gstack`
+- runs gstack setup for Claude + Codex
+- runs `gstack-team-init required` by default
+- adds a small `AGENTS.md` bridge so Hermes follows the same workflow
+- tells you exactly what generated files to review/commit
+
+Use `GSTACK_MODE=optional` if you do not want to block non-gstack work in a client's repo.
 
 ## Manual Railway UI setup
 

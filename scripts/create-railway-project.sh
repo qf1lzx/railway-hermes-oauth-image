@@ -8,12 +8,27 @@ REPO="${REPO:-qf1lzx/railway-hermes-oauth-image}"
 VOLUME_MOUNT_PATH="${VOLUME_MOUNT_PATH:-/data}"
 GOOGLE_TOKEN_JSON_PATH="${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
 GOOGLE_CLIENT_SECRET_JSON_PATH="${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
-HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
+DEFAULT_HERMES_WORKSPACE_DRIVE_FOLDER_ID="10Io92h6D936VcajyNYJJ9RYFkfKYQyXV"
+HERMES_WORKSPACE_DRIVE_FOLDER_ID_WAS_SET="${HERMES_WORKSPACE_DRIVE_FOLDER_ID+x}"
+HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-$DEFAULT_HERMES_WORKSPACE_DRIVE_FOLDER_ID}"
 HERMES_SHARED_STATE_SYNC="${HERMES_SHARED_STATE_SYNC:-drive}"
 HERMES_SHARED_STATE_PULL_OVERWRITE="${HERMES_SHARED_STATE_PULL_OVERWRITE:-true}"
+GSTACK_AUTO_SETUP="${GSTACK_AUTO_SETUP:-true}"
+GSTACK_HOSTS="${GSTACK_HOSTS:-codex,claude}"
+GSTACK_TEAM_MODE="${GSTACK_TEAM_MODE:-false}"
+GSTACK_SKILL_PREFIX="${GSTACK_SKILL_PREFIX:-false}"
+CLIENT_NAME="${CLIENT_NAME:-}"
+CLIENT_SLUG="${CLIENT_SLUG:-}"
 LOCAL_HERMES_HOME="${LOCAL_HERMES_HOME:-$HOME/.hermes}"
 RUN_CLOUD_AUTH="${RUN_CLOUD_AUTH:-true}"
 RUN_SMOKE_TESTS="${RUN_SMOKE_TESTS:-true}"
+
+if [ -n "$CLIENT_NAME$CLIENT_SLUG" ] && [ -z "$HERMES_WORKSPACE_DRIVE_FOLDER_ID_WAS_SET" ]; then
+  echo "Client mode detected (CLIENT_NAME/CLIENT_SLUG set) and no HERMES_WORKSPACE_DRIVE_FOLDER_ID was provided."
+  echo "Disabling Drive shared-state sync to avoid wiring a client deployment to Nick's personal Hermes Drive folder."
+  HERMES_WORKSPACE_DRIVE_FOLDER_ID=""
+  HERMES_SHARED_STATE_SYNC="none"
+fi
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -132,9 +147,21 @@ else
   echo "Warning: Google client secret not found at $GOOGLE_CLIENT_SECRET_JSON_PATH; Drive workspace sync will not work until GOOGLE_CLIENT_SECRET_JSON is set." >&2
 fi
 
-railway variable set --service "$SERVICE_NAME" "HERMES_WORKSPACE_DRIVE_FOLDER_ID=$HERMES_WORKSPACE_DRIVE_FOLDER_ID" --skip-deploys >/dev/null
+if [ -n "$HERMES_WORKSPACE_DRIVE_FOLDER_ID" ]; then
+  railway variable set --service "$SERVICE_NAME" "HERMES_WORKSPACE_DRIVE_FOLDER_ID=$HERMES_WORKSPACE_DRIVE_FOLDER_ID" --skip-deploys >/dev/null
+fi
 railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_SYNC=$HERMES_SHARED_STATE_SYNC" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_PULL_OVERWRITE=$HERMES_SHARED_STATE_PULL_OVERWRITE" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_AUTO_SETUP=$GSTACK_AUTO_SETUP" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_HOSTS=$GSTACK_HOSTS" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_TEAM_MODE=$GSTACK_TEAM_MODE" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "GSTACK_SKILL_PREFIX=$GSTACK_SKILL_PREFIX" --skip-deploys >/dev/null
+if [ -n "$CLIENT_NAME" ]; then
+  railway variable set --service "$SERVICE_NAME" "CLIENT_NAME=$CLIENT_NAME" --skip-deploys >/dev/null
+fi
+if [ -n "$CLIENT_SLUG" ]; then
+  railway variable set --service "$SERVICE_NAME" "CLIENT_SLUG=$CLIENT_SLUG" --skip-deploys >/dev/null
+fi
 
 if [ "$HERMES_SHARED_STATE_SYNC" = "drive" ] && [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
   echo "Publishing local non-secret Hermes shared state bundle to Drive"

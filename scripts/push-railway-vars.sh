@@ -49,11 +49,32 @@ set_var_if_present() {
 set_var_file GOOGLE_TOKEN_JSON "${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}"
 set_var_file GOOGLE_CLIENT_SECRET_JSON "${GOOGLE_CLIENT_SECRET_JSON_PATH:-$HOME/.hermes/google_client_secret.json}"
 
-: "${HERMES_WORKSPACE_DRIVE_FOLDER_ID:=10Io92h6D936VcajyNYJJ9RYFkfKYQyXV}"
+DEFAULT_HERMES_WORKSPACE_DRIVE_FOLDER_ID="10Io92h6D936VcajyNYJJ9RYFkfKYQyXV"
+HERMES_WORKSPACE_DRIVE_FOLDER_ID_WAS_SET="${HERMES_WORKSPACE_DRIVE_FOLDER_ID+x}"
+: "${HERMES_WORKSPACE_DRIVE_FOLDER_ID:=$DEFAULT_HERMES_WORKSPACE_DRIVE_FOLDER_ID}"
 : "${HERMES_SHARED_STATE_SYNC:=drive}"
+if [ -n "${CLIENT_NAME:-}${CLIENT_SLUG:-}" ] && [ -z "$HERMES_WORKSPACE_DRIVE_FOLDER_ID_WAS_SET" ]; then
+  echo "client mode without HERMES_WORKSPACE_DRIVE_FOLDER_ID; disabling Drive sync to avoid using Nick's personal Drive folder"
+  HERMES_WORKSPACE_DRIVE_FOLDER_ID=""
+  HERMES_SHARED_STATE_SYNC="none"
+fi
 set_var_if_present HERMES_WORKSPACE_DRIVE_FOLDER_ID
 set_var_if_present HERMES_SHARED_STATE_SYNC
 set_var_if_present HERMES_SHARED_STATE_PULL_OVERWRITE
+
+: "${GSTACK_AUTO_SETUP:=true}"
+: "${GSTACK_HOSTS:=codex,claude}"
+: "${GSTACK_TEAM_MODE:=false}"
+: "${GSTACK_SKILL_PREFIX:=false}"
+set_var_if_present GSTACK_AUTO_SETUP
+set_var_if_present GSTACK_HOSTS
+set_var_if_present GSTACK_TEAM_MODE
+set_var_if_present GSTACK_SKILL_PREFIX
+set_var_if_present GSTACK_REPO
+set_var_if_present GSTACK_REF
+set_var_if_present GSTACK_UPDATE_ON_BOOT
+set_var_if_present CLIENT_NAME
+set_var_if_present CLIENT_SLUG
 
 if [ "${HERMES_SHARED_STATE_SYNC:-}" = "drive" ] && [ -s "${GOOGLE_TOKEN_JSON_PATH:-$HOME/.hermes/google_token.json}" ]; then
   echo "publishing non-secret Hermes shared state bundle to Drive"

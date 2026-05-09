@@ -3,10 +3,14 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 ARG HERMES_REF=0bcc327cab9dc9b60d80e6e0e5239149d7a83207
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates git tini && \
+    apt-get install -y --no-install-recommends curl ca-certificates git tini unzip && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
+
+ENV BUN_INSTALL=/usr/local
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/usr/local/bin:${PATH}"
 
 RUN git clone --filter=blob:none https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
     cd /opt/hermes-agent && \
@@ -20,7 +24,8 @@ COPY entrypoint.sh /app/entrypoint.sh
 COPY health.py /app/health.py
 COPY shared_state_sync.py /app/shared_state_sync.py
 COPY scripts/hermes-cloud-auth.sh /usr/local/bin/hermes-cloud-auth
-RUN chmod +x /app/entrypoint.sh /app/shared_state_sync.py /usr/local/bin/hermes-cloud-auth && mkdir -p /data/.hermes
+COPY scripts/setup-gstack.sh /usr/local/bin/setup-gstack
+RUN chmod +x /app/entrypoint.sh /app/shared_state_sync.py /usr/local/bin/hermes-cloud-auth /usr/local/bin/setup-gstack && mkdir -p /data/.hermes
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes

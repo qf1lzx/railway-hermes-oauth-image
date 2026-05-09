@@ -10,9 +10,9 @@ mkdir -p "$HERMES_HOME" \
   "$HERMES_HOME/memories" "$HERMES_HOME/skills" "$HERMES_HOME/pairing" \
   "$HERMES_HOME/hooks" "$HERMES_HOME/image_cache" "$HERMES_HOME/audio_cache" \
   "$HERMES_HOME/workspace" \
-  "$HOME/.codex"
+  "$HOME/.codex" "$HOME/.claude" "$HOME/.gstack"
 
-chmod 700 "$HERMES_HOME" "$HOME/.codex" || true
+chmod 700 "$HERMES_HOME" "$HOME/.codex" "$HOME/.claude" "$HOME/.gstack" || true
 rm -f "$HERMES_HOME/gateway.pid"
 
 write_b64_file() {
@@ -162,6 +162,7 @@ for key in \
   OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
   GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY \
   HERMES_WORKSPACE_DRIVE_FOLDER_ID HERMES_SHARED_STATE_SYNC HERMES_SHARED_STATE_PULL_OVERWRITE \
+  GSTACK_AUTO_SETUP GSTACK_HOSTS GSTACK_TEAM_MODE GSTACK_SKILL_PREFIX GSTACK_REPO GSTACK_REF GSTACK_UPDATE_ON_BOOT \
   HERMES_YOLO_MODE HERMES_API_TIMEOUT HERMES_STREAM_READ_TIMEOUT HERMES_REDACT_SECRETS; do
   append_env_if_set "$key"
 done
@@ -176,14 +177,25 @@ python /app/health.py &
 health_pid=$!
 echo "[boot] health server pid=$health_pid"
 
+if [ "${GSTACK_AUTO_SETUP:-true}" = "true" ]; then
+  setup-gstack > "$HERMES_HOME/logs/gstack-setup.log" 2>&1 &
+  gstack_pid=$!
+  echo "[boot] gstack setup pid=$gstack_pid (log: $HERMES_HOME/logs/gstack-setup.log)"
+else
+  gstack_pid=""
+fi
+
 hermes gateway run > "$HERMES_HOME/logs/gateway.log" 2>&1 &
 gateway_pid=$!
 echo "[boot] gateway pid=$gateway_pid"
 
 cleanup() {
   echo "[boot] shutting down"
+  if [ -n "${gstack_pid:-}" ]; then
+    kill "$gstack_pid" 2>/dev/null || true
+  fi
   kill "$gateway_pid" "$health_pid" 2>/dev/null || true
-  wait "$gateway_pid" "$health_pid" 2>/dev/null || true
+  wait "$gateway_pid" "$health_pid" ${gstack_pid:-} 2>/dev/null || true
 }
 trap cleanup TERM INT
 
