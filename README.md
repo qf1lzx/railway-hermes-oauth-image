@@ -27,7 +27,7 @@ So until this is published from the Railway Templates UI, use one of the two set
 
 ## Fastest setup: one local script
 
-This creates/uses a Railway project, adds the GitHub-backed service, attaches the `/data` volume, sets gateway variables, and triggers a deployment.
+This creates/uses a Railway project, validates the Telegram bot token with Telegram `getMe` without printing it, adds the GitHub-backed service, attaches the `/data` volume, sets gateway variables via stdin-safe Railway CLI calls, and triggers a deployment.
 
 OAuth is **not** copied from your Mac. After the first deploy, SSH into the Railway container and run `hermes-cloud-auth`; it prints the OAuth links/device-code prompts in the Railway shell, you copy/paste them into your browser, and Hermes writes the cloud-owned token store to `/data/.hermes/auth.json`.
 
@@ -36,7 +36,7 @@ cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
 ./scripts/create-railway-project.sh
 ```
 
-After Railway deploys:
+After Railway deploys, the script can run `hermes-cloud-auth` for you. If you skipped it with `RUN_CLOUD_AUTH=false`, run it manually:
 
 ```bash
 railway ssh --service hermes
@@ -44,6 +44,8 @@ hermes-cloud-auth
 exit
 railway restart --service hermes
 ```
+
+`hermes-cloud-auth` authenticates providers independently and runs Nous first. If Codex device-code creation fails from Railway, Nous can still be saved to `/data/.hermes/auth.json`; rerun only the failed provider later.
 
 The setup script will ask for:
 
@@ -65,7 +67,7 @@ export TELEGRAM_ALLOWED_USERS='123456789'
 ./scripts/create-railway-project.sh
 ```
 
-The script sets these Railway variables without printing secret values:
+The script sets these Railway variables without printing secret values. Secret and JSON values use `railway variable set --stdin`; do not verify them with `railway variables --service ...` because that command can print raw values in a table.
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_USERS`
@@ -140,10 +142,11 @@ The file lives on the Railway `/data` volume, so it survives rebuilds/redeploys 
 
 ## Optional: push local secrets to an already-linked Railway service
 
-If you already have a Railway service linked to this directory:
+If you already have a Railway service linked to this directory, this helper uses stdin-safe `railway variable set` calls. Set `SERVICE_NAME` if the service is not named `hermes`:
 
 ```bash
 cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
+export SERVICE_NAME='hermes'
 export TELEGRAM_BOT_TOKEN='...'
 export TELEGRAM_ALLOWED_USERS='123456789'
 export GATEWAY_ALLOW_ALL_USERS=false
@@ -259,6 +262,8 @@ hermes gateway container ok
 
 ## Caveats
 
+- If Railway CLI auth looks stale even though `railway whoami` works, rerun `railway login --browserless`. Some operations can fail with stale Railway auth while basic identity checks still pass.
+- If `railway ssh` reports no active deployment or times out after a deploy, check `railway deployment list --service hermes`; for stubborn cases, pin the current running deployment instance.
 - Do not paste local `~/.hermes/auth.json` into Railway for normal setup. Run `hermes-cloud-auth` in `railway ssh` and copy/paste the printed OAuth links into your browser so Railway creates its own `/data/.hermes/auth.json`.
 - Railway is Linux; Mac-only local integrations like Cua Driver, BlueBubbles/iMessage, and Spotify AppleScript will not work inside this container.
 - A real one-click Railway template link requires creating/publishing a template from Railway's Templates UI. This repo is ready for that, but the generic GitHub URL is not a marketplace template code.

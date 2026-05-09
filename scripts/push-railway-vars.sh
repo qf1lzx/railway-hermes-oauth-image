@@ -7,16 +7,28 @@ if ! command -v railway >/dev/null 2>&1; then
 fi
 
 if ! railway whoami >/dev/null 2>&1; then
-  echo "Run: railway login" >&2
+  echo "Run: railway login --browserless" >&2
   exit 1
 fi
+
+SERVICE_NAME="${SERVICE_NAME:-hermes}"
+
+set_var_stdin() {
+  local name="$1"
+  local value="$2"
+  if [ -n "$value" ]; then
+    # Avoid `railway variables --set`, which can echo a raw variables table with secrets.
+    printf '%s' "$value" | railway variable set --service "$SERVICE_NAME" --skip-deploys --stdin "$name" >/dev/null
+    echo "set $name"
+  fi
+}
 
 set_var_file() {
   local name="$1"
   local file="$2"
   if [ -f "$file" ]; then
-    railway variables --set "$name=$(cat "$file")"
-    echo "set $name from $file"
+    set_var_stdin "$name" "$(cat "$file")"
+    echo "  source: $file"
   else
     echo "skip $name: $file not found"
   fi
@@ -26,8 +38,8 @@ set_var_if_present() {
   local name="$1"
   local value="${!name:-}"
   if [ -n "$value" ]; then
-    railway variables --set "$name=$value"
-    echo "set $name from shell env"
+    set_var_stdin "$name" "$value"
+    echo "  source: shell env"
   fi
 }
 
@@ -58,7 +70,7 @@ done
 
 echo
 cat <<'EOF'
-Done. Make sure the Railway service has a volume mounted at /data.
+Done. Variables were set on the Railway service named by SERVICE_NAME, default: hermes. Make sure it has a volume mounted at /data.
 If you have not linked this repo to a Railway project yet, run:
   railway link
 or create one with:

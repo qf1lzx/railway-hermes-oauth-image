@@ -18,13 +18,24 @@ auth_provider() {
   local provider="$1"
   if hermes auth status "$provider" 2>/dev/null | grep -q 'logged in'; then
     echo "$provider already logged in; skipping"
-  else
-    hermes auth add "$provider" --type oauth --no-browser
+    return 0
   fi
+
+  echo "Authenticating $provider..."
+  if hermes auth add "$provider" --type oauth --no-browser; then
+    echo "$provider auth completed"
+    return 0
+  fi
+
+  echo "WARNING: $provider auth failed; continuing so another provider is not blocked." >&2
+  return 1
 }
 
-auth_provider openai-codex
-auth_provider nous
+failed=0
+# Run Nous first because Codex device-code creation can fail from some cloud networks;
+# one provider failure should not prevent the other from being bootstrapped.
+auth_provider nous || failed=1
+auth_provider openai-codex || failed=1
 
 echo
 echo "Verifying cloud auth store..."
@@ -37,6 +48,13 @@ if [ -s "$HERMES_HOME/auth.json" ]; then
 else
   echo "ERROR: $HERMES_HOME/auth.json was not created" >&2
   exit 1
+fi
+
+if [ "${failed:-0}" != "0" ]; then
+  echo
+  echo "One or more providers failed. Re-run this helper later or authenticate that provider manually with:" >&2
+  echo "  export HOME=/data HERMES_HOME=/data/.hermes" >&2
+  echo "  hermes auth add <provider> --type oauth --no-browser" >&2
 fi
 
 echo

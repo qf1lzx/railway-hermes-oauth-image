@@ -25,6 +25,7 @@ need_cmd() {
 need_cmd railway
 need_cmd python
 need_cmd base64
+need_cmd curl
 
 railway_ssh() {
   local args=(ssh --service "$SERVICE_NAME")
@@ -43,7 +44,7 @@ wait_for_railway_ssh() {
     echo "Waiting for Railway SSH/deployment to become ready ($attempt/30)..."
     sleep 10
   done
-  echo "Timed out waiting for Railway SSH/deployment readiness." >&2
+  echo "Timed out waiting for Railway SSH/deployment readiness. Check: railway deployment list --service $SERVICE_NAME; if SSH reports no active deployment, pin the RUNNING deployment instance." >&2
   return 1
 }
 
@@ -57,7 +58,7 @@ hydrate_shared_state_to_cloud() {
 }
 
 if ! railway whoami >/dev/null 2>&1; then
-  echo "Railway CLI is not logged in. Run: railway login" >&2
+  echo "Railway CLI is not logged in. Run: railway login --browserless" >&2
   exit 1
 fi
 
@@ -72,6 +73,12 @@ fi
 
 if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_ALLOWED_USERS" ]; then
   echo "TELEGRAM_BOT_TOKEN and TELEGRAM_ALLOWED_USERS are required." >&2
+  exit 1
+fi
+
+echo "Validating Telegram bot token with Telegram getMe (token is not printed)"
+if ! curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe" | python -c 'import json,sys; data=json.load(sys.stdin); assert data.get("ok") is True, data' >/dev/null; then
+  echo "Telegram rejected TELEGRAM_BOT_TOKEN. Create/check the token in @BotFather before deploying." >&2
   exit 1
 fi
 
@@ -109,18 +116,18 @@ else
 fi
 
 echo "Setting Railway variables without printing secret values"
-printf '%s' "$TELEGRAM_BOT_TOKEN" | railway variable set --service "$SERVICE_NAME" TELEGRAM_BOT_TOKEN --stdin --skip-deploys >/dev/null
+printf '%s' "$TELEGRAM_BOT_TOKEN" | railway variable set --service "$SERVICE_NAME" --skip-deploys --stdin TELEGRAM_BOT_TOKEN >/dev/null
 railway variable set --service "$SERVICE_NAME" "TELEGRAM_ALLOWED_USERS=$TELEGRAM_ALLOWED_USERS" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GATEWAY_ALLOW_ALL_USERS=false" --skip-deploys >/dev/null
 
 if [ -s "$GOOGLE_TOKEN_JSON_PATH" ]; then
-  printf '%s' "$(cat "$GOOGLE_TOKEN_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" GOOGLE_TOKEN_JSON --stdin --skip-deploys >/dev/null
+  printf '%s' "$(cat "$GOOGLE_TOKEN_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" --skip-deploys --stdin GOOGLE_TOKEN_JSON >/dev/null
 else
   echo "Warning: Google token not found at $GOOGLE_TOKEN_JSON_PATH; Drive workspace sync will not work until GOOGLE_TOKEN_JSON is set." >&2
 fi
 
 if [ -s "$GOOGLE_CLIENT_SECRET_JSON_PATH" ]; then
-  printf '%s' "$(cat "$GOOGLE_CLIENT_SECRET_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" GOOGLE_CLIENT_SECRET_JSON --stdin --skip-deploys >/dev/null
+  printf '%s' "$(cat "$GOOGLE_CLIENT_SECRET_JSON_PATH")" | railway variable set --service "$SERVICE_NAME" --skip-deploys --stdin GOOGLE_CLIENT_SECRET_JSON >/dev/null
 else
   echo "Warning: Google client secret not found at $GOOGLE_CLIENT_SECRET_JSON_PATH; Drive workspace sync will not work until GOOGLE_CLIENT_SECRET_JSON is set." >&2
 fi
