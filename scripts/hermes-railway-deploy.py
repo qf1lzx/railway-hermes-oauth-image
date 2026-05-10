@@ -106,7 +106,11 @@ DEFAULT_TOOLS = {
 
 @dataclass
 class DeployPlan:
+    project_mode: str = "create"  # create | existing | current
     project_name: str = "hermes-agent"
+    project_ref: str = ""
+    environment: str = ""
+    service_mode: str = "create"  # create | existing | auto
     service_name: str = "hermes"
     repo: str = DEFAULT_REPO
     volume_mount_path: str = "/data"
@@ -269,10 +273,30 @@ def collect_interactive() -> DeployPlan:
 
     plan = DeployPlan()
 
-    heading("1. Railway project")
-    plan.project_name = prompt(plan.project_name, "Project name", required=True)
-    plan.service_name = prompt(plan.service_name, "Service name", required=True)
-    plan.repo = prompt(plan.repo, "GitHub repo to deploy", required=True)
+    heading("1. Railway project/service")
+    plan.project_mode = choose_one("Project target:", [
+        ("create", "Create a new Railway project"),
+        ("existing", "Connect/link this directory to an existing Railway project"),
+        ("current", "Use the project already linked in this directory"),
+    ], "create")
+    if plan.project_mode == "create":
+        plan.project_name = prompt(plan.project_name, "New Railway project name", required=True)
+    elif plan.project_mode == "existing":
+        plan.project_ref = prompt(os.environ.get("RAILWAY_PROJECT_ID", ""), "Existing Railway project ID or exact name", required=True)
+        plan.environment = prompt(os.environ.get("RAILWAY_ENVIRONMENT", ""), "Environment name/ID (blank for Railway default)")
+    else:
+        note("Using the Railway project currently linked to this directory. If none is linked, the deployer will stop with a clear error.")
+
+    plan.service_mode = choose_one("Service target:", [
+        ("create", "Create a new service from this GitHub repo / railway up"),
+        ("existing", "Connect to an existing service in the selected project"),
+        ("auto", "Auto: use existing service if present, otherwise create it"),
+    ], "create")
+    plan.service_name = prompt(plan.service_name, "Service name or ID", required=True)
+    if plan.service_mode != "existing":
+        plan.repo = prompt(plan.repo, "GitHub repo to deploy", required=True)
+    else:
+        note("Existing-service mode will not run `railway add`; it will link/set variables/deploy to that service.")
     plan.expose_domain = yes_no("Create a Railway public domain for /health after deploy?", False)
 
     heading("2. Client / workspace mode")
@@ -411,8 +435,14 @@ def collect_interactive() -> DeployPlan:
 
 def apply_env_overrides(plan: DeployPlan) -> DeployPlan:
     for attr, env_name in [
+        ("project_mode", "RAILWAY_PROJECT_MODE"),
         ("project_name", "PROJECT_NAME"),
+        ("project_ref", "RAILWAY_PROJECT_ID"),
+        ("project_ref", "RAILWAY_PROJECT"),
+        ("environment", "RAILWAY_ENVIRONMENT"),
+        ("service_mode", "RAILWAY_SERVICE_MODE"),
         ("service_name", "SERVICE_NAME"),
+        ("service_name", "RAILWAY_SERVICE_ID"),
         ("repo", "REPO"),
         ("volume_mount_path", "VOLUME_MOUNT_PATH"),
     ]:
@@ -431,11 +461,25 @@ def apply_env_overrides(plan: DeployPlan) -> DeployPlan:
     return plan
 
 
+def validate_plan(plan: DeployPlan) -> None:
+    if plan.project_mode not in {"create", "existing", "current"}:
+        raise SystemExit(f"Invalid RAILWAY_PROJECT_MODE={plan.project_mode!r}; use create, existing, or current")
+    if plan.service_mode not in {"create", "existing", "auto"}:
+        raise SystemExit(f"Invalid RAILWAY_SERVICE_MODE={plan.service_mode!r}; use create, existing, or auto")
+    if plan.project_mode == "existing" and not plan.project_ref:
+        raise SystemExit("RAILWAY_PROJECT_MODE=existing requires RAILWAY_PROJECT_ID or RAILWAY_PROJECT")
+    if not plan.service_name:
+        raise SystemExit("SERVICE_NAME or RAILWAY_SERVICE_ID is required")
+
+
 def print_plan(plan: DeployPlan, *, dry_run: bool) -> None:
     heading("Deployment plan")
-    print(f"Project:  {plan.project_name}")
-    print(f"Service:  {plan.service_name}")
-    print(f"Repo:     {plan.repo}")
+    project_display = plan.project_name if plan.project_mode == "create" else (plan.project_ref or "current link")
+    print(f"Project:  {project_display} ({plan.project_mode})")
+    if plan.environment:
+        print(f"Env:      {plan.environment}")
+    print(f"Service:  {plan.service_name} ({plan.service_mode})")
+    print(f"Repo:     {plan.repo if plan.service_mode != 'existing' else 'existing service'}")
     print(f"Volume:   {plan.volume_mount_path}")
     print(f"Preset:   {PRESETS.get(plan.preset, {}).get('label', plan.preset)}")
     print(f"OAuth:    {', '.join(plan.oauth_providers) or 'none'}")
@@ -456,7 +500,7 @@ def railway_json(cmd: list[str]) -> object | None:
 def service_exists(service_name: str) -> bool:
     data = railway_json(["railway", "service", "list", "--json"])
     if isinstance(data, list):
-        return any(item.get("name") == service_name for item in data if isinstance(item, dict))
+        return any(item.get("name") == service_name or item.get("id") == service_name for item in data if isinstance(item, dict))
     # fallback for older CLI formats
     cp = subprocess.run(["railway", "service", "list"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     return service_name in cp.stdout
@@ -528,22 +572,45 @@ def deploy(plan: DeployPlan, *, dry_run: bool) -> None:
             sys.exit(1)
 
     heading("Creating/linking Railway project")
-    linked = subprocess.run(["railway", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0 if not dry_run else False
-    if linked:
-        success("Already linked to a Railway project; using current link.")
+    if plan.project_mode == "current":
+        if dry_run:
+            print(color("DRY-RUN ", "33") + "verify current directory is linked with railway status")
+        else:
+            cp = subprocess.run(["railway", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if cp.returncode != 0:
+                fail("This directory is not linked to a Railway project. Re-run and choose create or existing, or run `railway link` first.")
+                sys.exit(1)
+            success("Using currently linked Railway project.")
+    elif plan.project_mode == "existing":
+        cmd = ["railway", "link", "--project", plan.project_ref]
+        if plan.environment:
+            cmd += ["--environment", plan.environment]
+        run(cmd, dry_run=dry_run)
     else:
         run(["railway", "init", "--name", plan.project_name], dry_run=dry_run)
 
     heading("Ensuring service and volume")
-    if dry_run or not service_exists(plan.service_name):
+    exists = False if dry_run else service_exists(plan.service_name)
+    if plan.service_mode == "existing":
+        if dry_run:
+            print(color("DRY-RUN ", "33") + f"railway service link {plan.service_name}")
+        elif not exists:
+            fail(f"Service not found in selected project/environment: {plan.service_name}")
+            print("Use service_mode=create/auto to create it, or check `railway service list --json`.", file=sys.stderr)
+            sys.exit(1)
+        else:
+            run(["railway", "service", "link", plan.service_name], dry_run=dry_run)
+            success(f"Linked existing service: {plan.service_name}")
+    elif plan.service_mode == "auto" and exists:
+        run(["railway", "service", "link", plan.service_name], check=False, dry_run=dry_run)
+        success(f"Using existing service: {plan.service_name}")
+    else:
         try:
             run(["railway", "add", "--repo", plan.repo, "--service", plan.service_name], dry_run=dry_run)
         except subprocess.CalledProcessError:
             warn("GitHub-backed service add failed; falling back to empty service + railway up.")
             run(["railway", "add", "--service", plan.service_name], dry_run=dry_run)
-    else:
-        success(f"Service exists: {plan.service_name}")
-    run(["railway", "service", "link", plan.service_name], check=False, dry_run=dry_run)
+        run(["railway", "service", "link", plan.service_name], check=False, dry_run=dry_run)
     if dry_run or not volume_exists(plan.volume_mount_path):
         run(["railway", "volume", "add", "--mount-path", plan.volume_mount_path], dry_run=dry_run)
     else:
@@ -650,6 +717,7 @@ def main() -> int:
         if args.no_smoke_test:
             plan.run_smoke_tests = False
 
+    validate_plan(plan)
     print_plan(plan, dry_run=args.dry_run)
     if not args.yes and not yes_no("Proceed?", True):
         warn("Cancelled.")

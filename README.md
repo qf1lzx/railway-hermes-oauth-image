@@ -37,7 +37,10 @@ cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
 
 The CLI walks you through:
 
-1. Railway project/service creation
+1. Railway project/service targeting:
+   - create a new Railway project/service
+   - connect/link to an existing Railway project
+   - attach to an existing Railway service, or auto-create if missing
 2. Telegram, Discord, or Slack gateway auth
 3. OAuth/subscription providers: **Nous**, **OpenAI Codex**, optional Qwen OAuth
 4. API-key providers: **OpenRouter**, Anthropic, OpenAI, Gemini, DeepSeek, xAI/Grok, Groq, Mistral, Copilot
@@ -63,8 +66,45 @@ Useful modes:
 # Non-interactive deploy from environment variables/defaults
 TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' ./scripts/deploy.sh --yes
 
+# Link to an existing Railway project and create/use a service there
+RAILWAY_PROJECT_MODE=existing RAILWAY_PROJECT_ID='your-project-id-or-name' \
+  RAILWAY_SERVICE_MODE=auto SERVICE_NAME='hermes' \
+  TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' \
+  ./scripts/deploy.sh --yes
+
+# Use an existing project + existing service, only update vars/deploy
+RAILWAY_PROJECT_MODE=existing RAILWAY_PROJECT_ID='your-project-id-or-name' \
+  RAILWAY_SERVICE_MODE=existing SERVICE_NAME='hermes' \
+  TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' \
+  ./scripts/deploy.sh --yes
+
+# Use whatever Railway project is already linked in this directory
+RAILWAY_PROJECT_MODE=current RAILWAY_SERVICE_MODE=auto SERVICE_NAME='hermes' ./scripts/deploy.sh --yes
+
 # Deploy only; do OAuth manually later
 ./scripts/deploy.sh --no-cloud-auth
+```
+
+
+### Project/service targeting modes
+
+The interactive deployer now asks separately for the Railway **project** and **service** target. This lets you choose one of these flows without editing scripts:
+
+| Target | What it does | Non-interactive env |
+|---|---|---|
+| New project | Runs `railway init --name ...` | `RAILWAY_PROJECT_MODE=create PROJECT_NAME=...` |
+| Existing project | Runs `railway link --project ...` and optional `--environment ...` | `RAILWAY_PROJECT_MODE=existing RAILWAY_PROJECT_ID=... RAILWAY_ENVIRONMENT=production` |
+| Current linked project | Verifies `railway status` and uses the current link | `RAILWAY_PROJECT_MODE=current` |
+| New service | Runs `railway add --repo ... --service ...` | `RAILWAY_SERVICE_MODE=create SERVICE_NAME=...` |
+| Existing service | Runs `railway service link ...` and refuses to create a new one if missing | `RAILWAY_SERVICE_MODE=existing SERVICE_NAME=...` |
+| Auto service | Uses the service if it exists, otherwise creates it | `RAILWAY_SERVICE_MODE=auto SERVICE_NAME=...` |
+
+You can pass service/project IDs instead of names when you want exact selection:
+
+```bash
+RAILWAY_PROJECT_MODE=existing RAILWAY_PROJECT_ID='f8574204-0751-475f-b096-1a0132c94c73' \
+RAILWAY_SERVICE_MODE=existing RAILWAY_SERVICE_ID='service-id-or-name' \
+./scripts/deploy.sh --yes
 ```
 
 ## Legacy/advanced setup: one local script
