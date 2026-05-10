@@ -99,49 +99,59 @@ if [ ! -f "$HERMES_HOME/.env" ]; then
   chmod 600 "$HERMES_HOME/.env"
 fi
 
-if [ ! -f "$HERMES_HOME/config.yaml" ]; then
+if [ ! -f "$HERMES_HOME/config.yaml" ] || [ "${HERMES_REGENERATE_CONFIG_FROM_ENV:-false}" = "true" ]; then
   cat > "$HERMES_HOME/config.yaml" <<EOF
 model:
   provider: "${HERMES_MAIN_PROVIDER:-${HERMES_MODEL_PROVIDER:-openai-codex}}"
   default: "${HERMES_MAIN_MODEL:-${LLM_MODEL:-openai/gpt-5.4}}"
+  base_url: "${HERMES_MAIN_BASE_URL:-}"
+  api_key: "${HERMES_MAIN_API_KEY:-}"
 
 delegation:
   provider: "${HERMES_DELEGATION_PROVIDER:-nous}"
   model: "${HERMES_DELEGATION_MODEL:-moonshotai/kimi-k2.6}"
   base_url: "${HERMES_DELEGATION_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+  api_key: "${HERMES_DELEGATION_API_KEY:-}"
 
 auxiliary:
   vision:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
     context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
   web_extract:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
     context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
   compression:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
     context_length: ${HERMES_AUX_CONTEXT_LENGTH:-1048576}
   title_generation:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
   approval:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
   skills_hub:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
   mcp:
     provider: "${HERMES_AUX_PROVIDER:-nous}"
     model: "${HERMES_AUX_MODEL:-google/gemini-3.1-flash-lite-preview}"
     base_url: "${HERMES_AUX_BASE_URL:-https://inference-api.nousresearch.com/v1}"
+    api_key: "${HERMES_AUX_API_KEY:-}"
 
 terminal:
   backend: "local"
@@ -173,8 +183,12 @@ for key in \
   FIRECRAWL_API_KEY TAVILY_API_KEY EXA_API_KEY FAL_KEY FAL_API_KEY \
   OPENAI_API_KEY OPENAI_BASE_URL ANTHROPIC_API_KEY OPENROUTER_API_KEY \
   GOOGLE_API_KEY GEMINI_API_KEY DEEPSEEK_API_KEY XAI_API_KEY GROQ_API_KEY MISTRAL_API_KEY \
-  KIMI_API_KEY DASHSCOPE_API_KEY GLM_API_KEY HF_TOKEN MINIMAX_API_KEY MINIMAX_CN_API_KEY \
+  KIMI_API_KEY DASHSCOPE_API_KEY GLM_API_KEY HF_TOKEN MINIMAX_API_KEY MINIMAX_CN_API_KEY XIAOMI_API_KEY \
+  KILOCODE_API_KEY AI_GATEWAY_API_KEY OPENCODE_ZEN_API_KEY OPENCODE_GO_API_KEY \
   GITHUB_TOKEN COPILOT_GITHUB_TOKEN HONCHO_API_KEY GBRAIN_API_KEY \
+  HERMES_REGENERATE_CONFIG_FROM_ENV HERMES_MAIN_PROVIDER HERMES_MAIN_MODEL HERMES_MAIN_BASE_URL HERMES_MAIN_API_KEY \
+  HERMES_DELEGATION_PROVIDER HERMES_DELEGATION_MODEL HERMES_DELEGATION_BASE_URL HERMES_DELEGATION_API_KEY \
+  HERMES_AUX_PROVIDER HERMES_AUX_MODEL HERMES_AUX_BASE_URL HERMES_AUX_API_KEY HERMES_AUX_CONTEXT_LENGTH \
   HERMES_MEMORY_PROVIDER HERMES_MEMORY_ENABLED HERMES_USER_PROFILE_ENABLED HERMES_OAUTH_PROVIDERS \
   HERMES_WORKSPACE_DRIVE_FOLDER_ID HERMES_SHARED_STATE_SYNC HERMES_SHARED_STATE_PULL_OVERWRITE \
   GSTACK_AUTO_SETUP GSTACK_HOSTS GSTACK_TEAM_MODE GSTACK_SKILL_PREFIX GSTACK_REPO GSTACK_REF GSTACK_UPDATE_ON_BOOT GSTACK_PLAYWRIGHT_BROWSERS_PATH GSTACK_CLEAN_PLAYWRIGHT_CACHE \

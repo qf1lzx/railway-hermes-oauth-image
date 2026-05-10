@@ -43,11 +43,14 @@ The CLI walks you through:
    - attach to an existing Railway service, or auto-create if missing
 2. Telegram, Discord, or Slack gateway auth
 3. OAuth/subscription providers: **Nous**, **OpenAI Codex**, optional Qwen OAuth
-4. API-key providers: **OpenRouter**, Anthropic, OpenAI, Gemini, DeepSeek, xAI/Grok, Groq, Mistral, Copilot
-5. Model-routing presets:
+4. API-key providers: **OpenRouter**, Anthropic, OpenAI, Gemini, DeepSeek, xAI/Grok, Groq, Mistral, Hugging Face, Z.AI/GLM, Kimi, DashScope, MiniMax, Xiaomi MiMo, Kilo Code, Vercel AI Gateway, OpenCode Zen/Go, Copilot
+5. Model-routing presets and overrides:
    - recommended **Codex main + Nous delegation/auxiliary**
    - Nous-first
    - OpenRouter fallback
+   - Anthropic API main + Nous aux/delegation
+   - Gemini API main + Nous aux/delegation
+   - optional custom OpenAI-compatible endpoint (`HERMES_MAIN_BASE_URL`, `HERMES_MAIN_API_KEY`)
 6. Optional tooling:
    - **gstack** auto-bootstrap
    - **Honcho** memory via `HONCHO_API_KEY`
@@ -83,8 +86,34 @@ RAILWAY_PROJECT_MODE=current RAILWAY_SERVICE_MODE=auto SERVICE_NAME='hermes' ./s
 
 # Deploy only; do OAuth manually later
 ./scripts/deploy.sh --no-cloud-auth
+
+# Non-interactive: route main to Anthropic API, while keeping Nous for aux/delegation
+HERMES_MAIN_PROVIDER='anthropic' \
+HERMES_MAIN_MODEL='anthropic/claude-sonnet-4.5' \
+ANTHROPIC_API_KEY='...' \
+TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' \
+./scripts/deploy.sh --yes
+
+# Non-interactive: custom OpenAI-compatible provider endpoint
+HERMES_MAIN_PROVIDER='openai' \
+HERMES_MAIN_MODEL='your/model' \
+HERMES_MAIN_BASE_URL='https://example.com/v1' \
+HERMES_MAIN_API_KEY='...' \
+TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' \
+./scripts/deploy.sh --yes
 ```
 
+### Provider/model routing variables
+
+The deploy CLI writes routing into Railway variables and sets `HERMES_REGENERATE_CONFIG_FROM_ENV=true`, so changing these Railway vars and restarting the service regenerates `/data/.hermes/config.yaml` without SSH file editing:
+
+| Role | Variables | Default |
+|---|---|---|
+| Main/Judge | `HERMES_MAIN_PROVIDER`, `HERMES_MAIN_MODEL`, optional `HERMES_MAIN_BASE_URL`, `HERMES_MAIN_API_KEY` | `openai-codex` / `openai/gpt-5.4` |
+| Delegation/Builder | `HERMES_DELEGATION_PROVIDER`, `HERMES_DELEGATION_MODEL`, optional `HERMES_DELEGATION_BASE_URL`, `HERMES_DELEGATION_API_KEY` | `nous` / `moonshotai/kimi-k2.6` |
+| Auxiliary/Reader | `HERMES_AUX_PROVIDER`, `HERMES_AUX_MODEL`, optional `HERMES_AUX_BASE_URL`, `HERMES_AUX_API_KEY`, `HERMES_AUX_CONTEXT_LENGTH` | `nous` / `google/gemini-3.1-flash-lite-preview` |
+
+If you manually edit `/data/.hermes/config.yaml` in Railway and do **not** want boot-time regeneration, set `HERMES_REGENERATE_CONFIG_FROM_ENV=false`. Direct `*_API_KEY` routing variables are treated as secrets by the deployer/dry-run output.
 
 ### Project/service targeting modes
 
@@ -232,6 +261,11 @@ TELEGRAM_ALLOWED_USERS=123456789
 GATEWAY_ALLOW_ALL_USERS=false
 HERMES_WORKSPACE_DRIVE_FOLDER_ID=10Io92h6D936VcajyNYJJ9RYFkfKYQyXV
 HERMES_SHARED_STATE_SYNC=drive
+HERMES_REGENERATE_CONFIG_FROM_ENV=true
+# Optional provider routing overrides:
+# HERMES_MAIN_PROVIDER=anthropic
+# HERMES_MAIN_MODEL=anthropic/claude-sonnet-4.5
+# ANTHROPIC_API_KEY=...
 ```
 
 5. Deploy, then run cloud OAuth inside the Railway container:

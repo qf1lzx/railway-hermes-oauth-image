@@ -55,6 +55,16 @@ API_PROVIDERS = [
     ProviderChoice("xai", "xAI / Grok API key", "api_key", "XAI_API_KEY", "xai", "x-ai/grok-4"),
     ProviderChoice("groq", "Groq API key", "api_key", "GROQ_API_KEY", "groq", "openai/gpt-oss-120b"),
     ProviderChoice("mistral", "Mistral API key", "api_key", "MISTRAL_API_KEY", "mistral", "mistral-large-latest"),
+    ProviderChoice("huggingface", "Hugging Face token", "api_key", "HF_TOKEN", "huggingface", "meta-llama/Llama-3.3-70B-Instruct"),
+    ProviderChoice("zai", "Z.AI / GLM API key", "api_key", "GLM_API_KEY", "zai", "z-ai/glm-4.5"),
+    ProviderChoice("kimi", "Kimi / Moonshot API key", "api_key", "KIMI_API_KEY", "moonshot", "moonshotai/kimi-k2"),
+    ProviderChoice("dashscope", "Alibaba DashScope API key", "api_key", "DASHSCOPE_API_KEY", "dashscope", "qwen/qwen3-coder"),
+    ProviderChoice("minimax", "MiniMax API key", "api_key", "MINIMAX_API_KEY", "minimax", "minimax/minimax-m1"),
+    ProviderChoice("xiaomi", "Xiaomi MiMo API key", "api_key", "XIAOMI_API_KEY", "xiaomi", "xiaomi/mimo-v2"),
+    ProviderChoice("kilocode", "Kilo Code API key", "api_key", "KILOCODE_API_KEY", "kilocode", None),
+    ProviderChoice("ai-gateway", "Vercel AI Gateway key", "api_key", "AI_GATEWAY_API_KEY", "ai-gateway", None),
+    ProviderChoice("opencode-zen", "OpenCode Zen key", "api_key", "OPENCODE_ZEN_API_KEY", "opencode-zen", None),
+    ProviderChoice("opencode-go", "OpenCode Go key", "api_key", "OPENCODE_GO_API_KEY", "opencode-go", None),
     ProviderChoice("copilot", "GitHub Copilot token", "token", "COPILOT_GITHUB_TOKEN", "github-copilot", None),
 ]
 
@@ -91,6 +101,28 @@ PRESETS = {
         "aux_provider": "openrouter",
         "aux_model": "google/gemini-2.5-flash-lite",
         "aux_base_url": "",
+    },
+    "anthropic-main-nous-aux": {
+        "label": "Anthropic API main + Nous aux/delegation",
+        "main_provider": "anthropic",
+        "main_model": "anthropic/claude-sonnet-4.5",
+        "delegation_provider": "nous",
+        "delegation_model": "moonshotai/kimi-k2.6",
+        "delegation_base_url": "https://inference-api.nousresearch.com/v1",
+        "aux_provider": "nous",
+        "aux_model": "google/gemini-3.1-flash-lite-preview",
+        "aux_base_url": "https://inference-api.nousresearch.com/v1",
+    },
+    "gemini-main-nous-aux": {
+        "label": "Gemini API main + Nous aux/delegation",
+        "main_provider": "google",
+        "main_model": "google/gemini-2.5-pro",
+        "delegation_provider": "nous",
+        "delegation_model": "moonshotai/kimi-k2.6",
+        "delegation_base_url": "https://inference-api.nousresearch.com/v1",
+        "aux_provider": "nous",
+        "aux_model": "google/gemini-3.1-flash-lite-preview",
+        "aux_base_url": "https://inference-api.nousresearch.com/v1",
     },
 }
 
@@ -346,17 +378,34 @@ def collect_interactive() -> DeployPlan:
         value = os.environ.get(env_name) or prompt_secret(f"{provider.label} ({env_name})", required=True)
         plan.secret_variables[env_name] = value
 
+    if yes_no("Add a custom/OpenAI-compatible provider endpoint?", False):
+        custom_provider = prompt("custom", "Hermes provider name (e.g. custom, openai, openrouter)", required=True)
+        custom_model = prompt("", "Default model name for that provider", required=True)
+        custom_base_url = prompt("", "Base URL (OpenAI-compatible /v1 endpoint)", required=True)
+        custom_key_var = prompt("CUSTOM_PROVIDER_API_KEY", "API key env var name", required=True)
+        custom_key = os.environ.get(custom_key_var) or prompt_secret(f"{custom_key_var}", required=True)
+        plan.secret_variables[custom_key_var] = custom_key
+        if yes_no("Use this custom provider as the main model?", False):
+            plan.variables["HERMES_MAIN_PROVIDER"] = custom_provider
+            plan.variables["HERMES_MAIN_MODEL"] = custom_model
+            plan.variables["HERMES_MAIN_BASE_URL"] = custom_base_url
+            plan.secret_variables["HERMES_MAIN_API_KEY"] = custom_key
+        else:
+            plan.variables[f"CUSTOM_PROVIDER_{custom_key_var}_BASE_URL"] = custom_base_url
+            plan.variables[f"CUSTOM_PROVIDER_{custom_key_var}_MODEL"] = custom_model
+
     heading("5. Model routing")
     plan.preset = choose_one("Choose a model-routing preset:", [(k, v["label"]) for k, v in PRESETS.items()], "subscription-duo")
     preset = PRESETS[plan.preset]
+    plan.variables.setdefault("HERMES_MAIN_PROVIDER", preset["main_provider"])
+    plan.variables.setdefault("HERMES_MAIN_MODEL", preset["main_model"])
     plan.variables.update({
-        "HERMES_MAIN_PROVIDER": preset["main_provider"],
-        "HERMES_MAIN_MODEL": preset["main_model"],
         "HERMES_DELEGATION_PROVIDER": preset["delegation_provider"],
         "HERMES_DELEGATION_MODEL": preset["delegation_model"],
         "HERMES_AUX_PROVIDER": preset["aux_provider"],
         "HERMES_AUX_MODEL": preset["aux_model"],
         "HERMES_AUX_CONTEXT_LENGTH": "1048576",
+        "HERMES_REGENERATE_CONFIG_FROM_ENV": "true",
     })
     if preset["delegation_base_url"]:
         plan.variables["HERMES_DELEGATION_BASE_URL"] = preset["delegation_base_url"]
@@ -367,12 +416,17 @@ def collect_interactive() -> DeployPlan:
         for key, label in [
             ("HERMES_MAIN_PROVIDER", "Main provider"),
             ("HERMES_MAIN_MODEL", "Main model"),
+            ("HERMES_MAIN_BASE_URL", "Main base URL (blank for provider default)"),
             ("HERMES_DELEGATION_PROVIDER", "Delegation provider"),
             ("HERMES_DELEGATION_MODEL", "Delegation model"),
+            ("HERMES_DELEGATION_BASE_URL", "Delegation base URL (blank for provider default)"),
             ("HERMES_AUX_PROVIDER", "Auxiliary provider"),
             ("HERMES_AUX_MODEL", "Auxiliary model"),
+            ("HERMES_AUX_BASE_URL", "Auxiliary base URL (blank for provider default)"),
+            ("HERMES_AUX_CONTEXT_LENGTH", "Auxiliary context length"),
         ]:
-            plan.variables[key] = prompt(plan.variables.get(key, ""), label, required=True)
+            required = "blank" not in label.lower()
+            plan.variables[key] = prompt(plan.variables.get(key, ""), label, required=required)
 
     heading("6. Tooling and memory")
     plan.tool_flags["gstack"] = yes_no("Auto-install gstack on Railway boot?", True)
@@ -451,7 +505,11 @@ def apply_env_overrides(plan: DeployPlan) -> DeployPlan:
     for key in [
         "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "DISCORD_BOT_TOKEN", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN",
         "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY",
-        "DEEPSEEK_API_KEY", "XAI_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY", "HONCHO_API_KEY", "GBRAIN_API_KEY",
+        "DEEPSEEK_API_KEY", "XAI_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY", "HF_TOKEN", "GLM_API_KEY",
+        "KIMI_API_KEY", "DASHSCOPE_API_KEY", "MINIMAX_API_KEY", "MINIMAX_CN_API_KEY", "XIAOMI_API_KEY",
+        "KILOCODE_API_KEY", "AI_GATEWAY_API_KEY", "OPENCODE_ZEN_API_KEY", "OPENCODE_GO_API_KEY",
+        "HERMES_MAIN_API_KEY", "HERMES_DELEGATION_API_KEY", "HERMES_AUX_API_KEY",
+        "HONCHO_API_KEY", "GBRAIN_API_KEY",
     ]:
         if os.environ.get(key):
             if key.endswith("TOKEN") or key.endswith("KEY"):
@@ -517,6 +575,10 @@ def volume_exists(mount_path: str) -> bool:
 def set_railway_var(service: str, name: str, value: str, *, secret: bool, dry_run: bool) -> None:
     if value == "":
         return
+    # Some routing variables can contain direct provider credentials in non-interactive mode.
+    # Treat them as secrets even if they arrived in plan.variables.
+    if name.endswith("_API_KEY") or name.endswith("_TOKEN") or name in {"HF_TOKEN"}:
+        secret = True
     if dry_run:
         shown = "<secret>" if secret else value
         print(color("DRY-RUN ", "33") + f"railway variable set --service {service} {name}={shown}")
@@ -691,11 +753,16 @@ def main() -> int:
         plan.variables.update({
             "HERMES_MAIN_PROVIDER": os.environ.get("HERMES_MAIN_PROVIDER", preset["main_provider"]),
             "HERMES_MAIN_MODEL": os.environ.get("HERMES_MAIN_MODEL", preset["main_model"]),
+            "HERMES_MAIN_BASE_URL": os.environ.get("HERMES_MAIN_BASE_URL", ""),
             "HERMES_DELEGATION_PROVIDER": os.environ.get("HERMES_DELEGATION_PROVIDER", preset["delegation_provider"]),
             "HERMES_DELEGATION_MODEL": os.environ.get("HERMES_DELEGATION_MODEL", preset["delegation_model"]),
+            "HERMES_DELEGATION_BASE_URL": os.environ.get("HERMES_DELEGATION_BASE_URL", preset["delegation_base_url"]),
             "HERMES_AUX_PROVIDER": os.environ.get("HERMES_AUX_PROVIDER", preset["aux_provider"]),
             "HERMES_AUX_MODEL": os.environ.get("HERMES_AUX_MODEL", preset["aux_model"]),
+            "HERMES_AUX_BASE_URL": os.environ.get("HERMES_AUX_BASE_URL", preset["aux_base_url"]),
+            "HERMES_AUX_CONTEXT_LENGTH": os.environ.get("HERMES_AUX_CONTEXT_LENGTH", "1048576"),
             "HERMES_OAUTH_PROVIDERS": os.environ.get("HERMES_OAUTH_PROVIDERS", ",".join(plan.oauth_providers)),
+            "HERMES_REGENERATE_CONFIG_FROM_ENV": os.environ.get("HERMES_REGENERATE_CONFIG_FROM_ENV", "true"),
             "GSTACK_AUTO_SETUP": os.environ.get("GSTACK_AUTO_SETUP", "true"),
             "GSTACK_HOSTS": os.environ.get("GSTACK_HOSTS", "codex,claude"),
             "GSTACK_PLAYWRIGHT_BROWSERS_PATH": os.environ.get("GSTACK_PLAYWRIGHT_BROWSERS_PATH", "/tmp/ms-playwright"),
