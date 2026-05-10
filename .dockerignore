@@ -10,5 +10,7 @@ codex-auth.json
 *auth*.json
 *.secret
 *.secrets
+__pycache__/
+*.py[cod]
 .DS_Store
 README.md

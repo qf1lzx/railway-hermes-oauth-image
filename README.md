@@ -26,7 +26,48 @@ https://railway.com/new/template/ZweBXA
 
 So until this is published from the Railway Templates UI, use one of the two setup paths below.
 
-## Fastest setup: one local script
+## One-click interactive deploy CLI
+
+Run the guided deployer when you want the simple, all-in-one path:
+
+```bash
+cd /Users/nickthegoat/Documents/Hermes/railway-hermes-oauth-image
+./scripts/deploy.sh
+```
+
+The CLI walks you through:
+
+1. Railway project/service creation
+2. Telegram, Discord, or Slack gateway auth
+3. OAuth/subscription providers: **Nous**, **OpenAI Codex**, optional Qwen OAuth
+4. API-key providers: **OpenRouter**, Anthropic, OpenAI, Gemini, DeepSeek, xAI/Grok, Groq, Mistral, Copilot
+5. Model-routing presets:
+   - recommended **Codex main + Nous delegation/auxiliary**
+   - Nous-first
+   - OpenRouter fallback
+6. Optional tooling:
+   - **gstack** auto-bootstrap
+   - **Honcho** memory via `HONCHO_API_KEY`
+   - GBrain-style/custom env credentials via `GBRAIN_API_KEY` or `NAME=value`
+   - Google Drive shared-state sync
+7. Railway deploy, cloud OAuth, restart, and smoke test
+
+Secrets are never written into this repository. API keys/tokens are sent to Railway through `railway variable set --stdin`; Nous/Codex OAuth is performed inside Railway with `hermes-cloud-auth`, which writes cloud-owned tokens to `/data/.hermes/auth.json` on the persistent volume.
+
+Useful modes:
+
+```bash
+# See exactly what would happen without touching Railway
+./scripts/deploy.sh --dry-run
+
+# Non-interactive deploy from environment variables/defaults
+TELEGRAM_BOT_TOKEN='...' TELEGRAM_ALLOWED_USERS='123456789' ./scripts/deploy.sh --yes
+
+# Deploy only; do OAuth manually later
+./scripts/deploy.sh --no-cloud-auth
+```
+
+## Legacy/advanced setup: one local script
 
 This creates/uses a Railway project, validates the Telegram bot token with Telegram `getMe` without printing it, adds the GitHub-backed service, attaches the `/data` volume, sets gateway variables via stdin-safe Railway CLI calls, and triggers a deployment.
 

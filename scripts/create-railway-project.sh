@@ -13,6 +13,7 @@ HERMES_WORKSPACE_DRIVE_FOLDER_ID_WAS_SET="${HERMES_WORKSPACE_DRIVE_FOLDER_ID+x}"
 HERMES_WORKSPACE_DRIVE_FOLDER_ID="${HERMES_WORKSPACE_DRIVE_FOLDER_ID:-$DEFAULT_HERMES_WORKSPACE_DRIVE_FOLDER_ID}"
 HERMES_SHARED_STATE_SYNC="${HERMES_SHARED_STATE_SYNC:-drive}"
 HERMES_SHARED_STATE_PULL_OVERWRITE="${HERMES_SHARED_STATE_PULL_OVERWRITE:-true}"
+HERMES_OAUTH_PROVIDERS="${HERMES_OAUTH_PROVIDERS:-nous,openai-codex}"
 GSTACK_AUTO_SETUP="${GSTACK_AUTO_SETUP:-true}"
 GSTACK_HOSTS="${GSTACK_HOSTS:-codex,claude}"
 GSTACK_TEAM_MODE="${GSTACK_TEAM_MODE:-false}"
@@ -154,6 +155,7 @@ if [ -n "$HERMES_WORKSPACE_DRIVE_FOLDER_ID" ]; then
 fi
 railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_SYNC=$HERMES_SHARED_STATE_SYNC" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "HERMES_SHARED_STATE_PULL_OVERWRITE=$HERMES_SHARED_STATE_PULL_OVERWRITE" --skip-deploys >/dev/null
+railway variable set --service "$SERVICE_NAME" "HERMES_OAUTH_PROVIDERS=$HERMES_OAUTH_PROVIDERS" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GSTACK_AUTO_SETUP=$GSTACK_AUTO_SETUP" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GSTACK_HOSTS=$GSTACK_HOSTS" --skip-deploys >/dev/null
 railway variable set --service "$SERVICE_NAME" "GSTACK_TEAM_MODE=$GSTACK_TEAM_MODE" --skip-deploys >/dev/null
@@ -187,7 +189,7 @@ Starting cloud OAuth bootstrap inside Railway.
 Approve the printed Codex/Nous device-code URLs in your browser when prompted.
 Set RUN_CLOUD_AUTH=false to skip this step on future runs when /data/.hermes/auth.json is already valid.
 EOF
-  railway_ssh 'export HOME=/data HERMES_HOME=/data/.hermes; hermes-cloud-auth'
+  railway_ssh 'export HOME=/data HERMES_HOME=/data/.hermes HERMES_OAUTH_PROVIDERS="'"$HERMES_OAUTH_PROVIDERS"'"; hermes-cloud-auth'
   railway restart --service "$SERVICE_NAME" --yes || railway restart --service "$SERVICE_NAME"
 fi
 

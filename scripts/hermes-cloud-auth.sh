@@ -32,10 +32,16 @@ auth_provider() {
 }
 
 failed=0
-# Run Nous first because Codex device-code creation can fail from some cloud networks;
-# one provider failure should not prevent the other from being bootstrapped.
-auth_provider nous || failed=1
-auth_provider openai-codex || failed=1
+providers_csv="${HERMES_OAUTH_PROVIDERS:-nous,openai-codex}"
+IFS=',' read -r -a providers <<< "$providers_csv"
+
+# Run providers independently. One provider failure should not prevent another
+# subscription/OAuth provider from being bootstrapped on the persistent volume.
+for provider in "${providers[@]}"; do
+  provider="$(printf '%s' "$provider" | xargs)"
+  [ -n "$provider" ] || continue
+  auth_provider "$provider" || failed=1
+done
 
 echo
 echo "Verifying cloud auth store..."

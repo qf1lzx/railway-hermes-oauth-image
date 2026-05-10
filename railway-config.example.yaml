@@ -54,4 +54,9 @@ terminal:
 agent:
   max_iterations: 90
 
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  provider: built_in
+
 data_dir: "/data/.hermes"
