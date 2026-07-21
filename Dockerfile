@@ -1,6 +1,6 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
-ARG HERMES_REF=d604141d097eec4a49493ad1eaceb9b2ca1e496d
+ARG HERMES_REF=11ae6bf0e3d334ae74d3b240dfc4c64171c60233
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
